@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: accommodation_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: accommodation_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: accommodation_redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    container_name: accommodation_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/accommodation_db
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+
+  nlp:
+    build: ./nlp-service
+    container_name: accommodation_nlp
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./nlp-service:/app
+
+volumes:
+  postgres_data:
