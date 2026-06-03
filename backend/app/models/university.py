@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
 from geoalchemy2 import Geography
-from db.base import Base
+from app.db.base import Base
 
 class University(Base):
     __tablename__ = "universities"

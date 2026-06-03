@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime # type: ignore
 from sqlalchemy.sql import func # type: ignore
-from db.base import Base
+from app.db.base import Base
 
 class User(Base):
     __tablename__ = "users"

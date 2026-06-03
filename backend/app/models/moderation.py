@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.sql import func
-from db.base import Base
+from app.db.base import Base
 
 class ModerationQueue(Base):
     __tablename__ = "moderation_queue"

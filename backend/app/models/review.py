@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Uniq
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
-from db.base import Base
+from app.db.base import Base
 
 class Review(Base):
     __tablename__ = "reviews"

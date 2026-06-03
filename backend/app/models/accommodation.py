@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Tex
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from geoalchemy2 import Geography
-from db.base import Base
+from app.db.base import Base
 
 class Accommodation(Base):
     __tablename__ = "accommodations"

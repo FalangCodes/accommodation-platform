@@ -1,0 +1,25 @@
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+class StudentCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=64)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not v.endswith(".ac.za"):
+            raise ValueError('Student registration requires a valid .ac.za institutional email address')
+        return v.lower()
+    
+class UserResponse(BaseModel):
+    id: int
+    email: EmailStr
+    role: str
+
+    class Config:
+        from_attributes = True
+
+class tokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    refresh_token: str
