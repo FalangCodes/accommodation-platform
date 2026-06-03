@@ -23,3 +23,10 @@ class tokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     refresh_token: str
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class RefreshRequest(BaseModel):
+    refresh_token: str

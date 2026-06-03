@@ -4,6 +4,7 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
+
 # Enforcing bycrypt with a work factor of 12 for password hashing
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
@@ -25,3 +26,18 @@ def create_access_token(subject: Union[str, Any]) -> str:
     to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+def create_refresh_token(subject: Union[str, Any]) -> str:
+    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+def decode_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise ValueError("Token has expired")
+    except jwt.JWTError:
+        raise ValueError("Invalid token")

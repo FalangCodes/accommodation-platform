@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
+from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, get_password_hash
+from app.schemas.auth import LoginRequest, RefreshRequest, StudentCreate, UserResponse, tokenResponse
 from app.db.base import get_db
 from app.models.user import User
 from app.models.student import Student
 from app.models.university import University
-from app.schemas.auth import StudentCreate, UserResponse
-from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -56,3 +55,67 @@ async def register_student(student_in: StudentCreate, db: AsyncSession = Depends
     await db.refresh(new_user)
 
     return new_user
+
+@router.post("/login", response_model=tokenResponse)
+async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
+    
+    # 1. Find the user
+    query = select(User).where(User.email == credentials.email)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+
+    # 2. Verify credentials
+    if not user or not verify_password(credentials.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+
+    # 3. Issue tokens
+    access_token = create_access_token(subject=user.id)
+    refresh_token = create_refresh_token(subject=user.id)
+
+    return tokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
+
+
+@router.post("/refresh", response_model=tokenResponse)
+async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
+
+    # 1. Decode and validate the refresh token
+    try:
+        token_data = decode_token(payload.refresh_token)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+    # 2. Confirm it is actually a refresh token
+    if token_data.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type"
+        )
+
+    # 3. Confirm user still exists and is active
+    query = select(User).where(User.id == int(token_data["sub"]))
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive"
+        )
+
+    # 4. Issue fresh tokens
+    access_token = create_access_token(subject=user.id)
+    new_refresh_token = create_refresh_token(subject=user.id)
+
+    return tokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token
+    )
