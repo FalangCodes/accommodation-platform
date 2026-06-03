@@ -53,8 +53,24 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            include_schemas=False,
-            exclude_tables={"spatial_ref_sys"},
+            include_schemas=True,
+            include_object=lambda obj, name, type_, reflected, compare_to: (
+                True if not reflected else
+                False if type_ == "table" and hasattr(obj, "schema") and obj.schema in ("tiger", "tiger_data", "topology") else
+                True if type_ == "table" and name not in (
+                    "spatial_ref_sys", "geography_columns", "geometry_columns",
+                    "raster_columns", "raster_overviews",
+                    "zip_lookup_base", "tabblock", "loader_variables", "state_lookup",
+                    "state", "street_type_lookup", "county_lookup", "place_lookup",
+                    "featnames", "pagc_rules", "tract", "bg", "geocode_settings",
+                    "layer", "geocode_settings_default", "place", "zcta5",
+                    "countysub_lookup", "edges", "cousub", "tabblock20", "county",
+                    "addr", "direction_lookup", "secondary_unit_lookup", "faces",
+                    "zip_lookup_all", "topology", "zip_state", "loader_platform",
+                    "zip_state_loc", "pagc_gaz", "addrfeat", "pagc_lex",
+                    "loader_lookuptables", "zip_lookup", "zip_state_loc"
+                ) else False
+            )
         )
         with context.begin_transaction():
             context.run_migrations()

@@ -30,6 +30,7 @@ class Review(Base):
     # Relationships
     student = relationship("Student", back_populates="reviews")
     accommodation = relationship("Accommodation", back_populates="reviews")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class ReviewNLPResult(Base):
     __tablename__ = "review_nlp_results"
