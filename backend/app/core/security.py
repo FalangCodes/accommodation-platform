@@ -3,6 +3,12 @@ from typing import Any, Union
 from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+bearer_scheme = HTTPBearer()
 
 
 # Enforcing bycrypt with a work factor of 12 for password hashing
@@ -41,3 +47,26 @@ def decode_token(token: str) -> dict:
         raise ValueError("Token has expired")
     except jwt.JWTError:
         raise ValueError("Invalid token")
+    
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(None)
+):
+    token = credentials.credentials
+    try:
+        payload = decode_token(token)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return payload

@@ -7,8 +7,13 @@ from app.db.base import get_db
 from app.models.user import User
 from app.models.student import Student
 from app.models.university import University
+from app.core.dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 @router.post("/register/student", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_student(student_in: StudentCreate, db: AsyncSession = Depends(get_db)):
