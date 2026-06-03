@@ -8,6 +8,8 @@ from app.models.user import User
 from app.models.student import Student
 from app.models.university import University
 from app.core.dependencies import get_current_user
+from app.models.landlord import Landlord
+from app.schemas.auth import LandlordCreate
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -124,3 +126,37 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
         access_token=access_token,
         refresh_token=new_refresh_token
     )
+
+@router.post("/register/landlord", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register_landlord(landlord_in: LandlordCreate, db: AsyncSession = Depends(get_db)):
+
+    # 1. Check if user already exists
+    query = select(User).where(User.email == landlord_in.email)
+    result = await db.execute(query)
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists."
+        )
+
+    # 2. Create the base User record
+    new_user = User(
+        email=landlord_in.email,
+        password_hash=get_password_hash(landlord_in.password),
+        role="landlord",
+        is_active=True
+    )
+    db.add(new_user)
+    await db.flush()
+
+    # 3. Create the linked Landlord profile
+    new_landlord = Landlord(
+        user_id=new_user.id,
+        display_name=landlord_in.display_name,
+        contact_phone=landlord_in.contact_phone
+    )
+    db.add(new_landlord)
+    await db.commit()
+    await db.refresh(new_user)
+
+    return new_user

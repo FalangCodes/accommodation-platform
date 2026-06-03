@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.v1.routes import auth
+from app.api.v1.routes import auth, accommodations
 
 app = FastAPI(
     title="Accommodation Platform API",
@@ -7,6 +7,7 @@ app = FastAPI(
 )
 
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(accommodations.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
