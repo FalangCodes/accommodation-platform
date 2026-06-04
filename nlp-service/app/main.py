@@ -18,7 +18,8 @@ ASPECT_LABELS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Loading sentiment model...")
+    print("Loading HuggingFace models...")
+
     ml_models["sentiment"] = pipeline(
         "sentiment-analysis",
         model="cardiffnlp/twitter-roberta-base-sentiment-latest",
@@ -26,6 +27,23 @@ async def lifespan(app: FastAPI):
         max_length=512
     )
     print("Sentiment model loaded.")
+
+    ml_models["toxicity"] = pipeline(
+        "text-classification",
+        model="unitary/toxic-bert",
+        truncation=True,
+        max_length=512
+    )
+    print("Toxicity model loaded.")
+
+    ml_models["aspects"] = pipeline(
+        "zero-shot-classification",
+        model="valhalla/distilbart-mnli-12-3",
+        truncation=True,
+    )
+    print("Aspect model loaded.")
+
+    print("All models loaded successfully.")
     yield
     ml_models.clear()
 
