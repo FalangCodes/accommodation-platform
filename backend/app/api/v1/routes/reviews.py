@@ -11,6 +11,7 @@ from app.models.student import Student
 from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.schemas.review import ReviewCreate, ReviewResponse
+from app.worker import analyze_review_task
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -81,6 +82,7 @@ async def submit_review(
     await db.refresh(new_review)
 
     # 6. TODO: Trigger NLP task via Celery (next step)
+    analyze_review_task.delay(new_review.id, new_review.body)
 
     return new_review
 
