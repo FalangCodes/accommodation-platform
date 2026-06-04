@@ -11,13 +11,7 @@ from alembic import context
 
 from app.core.config import settings
 from app.db.base import Base
-from app.models.user import User
-from app.models.student import Student
-from app.models.landlord import Landlord
-from app.models.university import University
-from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
-from app.models.review import Review, ReviewNLPResult, ReviewReply
-from app.models.moderation import ModerationLog, ModerationQueue, Appeal
+from app.db.models import *
 
 config = context.config
 config.set_main_option(
