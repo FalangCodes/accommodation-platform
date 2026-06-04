@@ -52,18 +52,6 @@ async def list_accommodations(db: AsyncSession = Depends(get_db)):
     result = await db.execute(query)
     return result.scalars().all()
 
-
-@router.get("/{accommodation_id}", response_model=AccommodationResponse)
-async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(get_db)):
-    query = select(Accommodation).where(Accommodation.id == accommodation_id)
-    result = await db.execute(query)
-    accommodation = result.scalar_one_or_none()
-
-    if not accommodation:
-        raise HTTPException(status_code=404, detail="Accommodation not found")
-
-    return accommodation
-
 @router.get("/search", response_model=List[AccommodationResponse])
 async def search_accommodations(
     university_id: int,
@@ -111,3 +99,16 @@ async def search_accommodations(
         accommodations.append(dict(row))
 
     return accommodations
+
+
+@router.get("/{accommodation_id}", response_model=AccommodationResponse)
+async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(get_db)):
+    query = select(Accommodation).where(Accommodation.id == accommodation_id)
+    result = await db.execute(query)
+    accommodation = result.scalar_one_or_none()
+
+    if not accommodation:
+        raise HTTPException(status_code=404, detail="Accommodation not found")
+
+    return accommodation
+
