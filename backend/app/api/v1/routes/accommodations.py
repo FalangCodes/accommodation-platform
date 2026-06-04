@@ -1,4 +1,4 @@
-from sqlalchemy import text
+from sqlalchemy import text, func
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -8,8 +8,9 @@ from app.db.base import get_db
 from app.core.dependencies import get_current_landlord
 from app.models.user import User
 from app.models.landlord import Landlord
-from app.models.accommodation import Accommodation
+from app.models.accommodation import Accommodation, AccommodationView
 from app.models.university import University
+from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
@@ -99,6 +100,103 @@ async def search_accommodations(
         accommodations.append(dict(row))
 
     return accommodations
+
+@router.get("/{accommodation_id}/analytics")
+async def get_analytics(
+    accommodation_id: int,
+    current_user: User = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Verify landlord owns this listing
+    query = select(Landlord).where(Landlord.user_id == current_user.id)
+    result = await db.execute(query)
+    landlord = result.scalar_one_or_none()
+
+    if not landlord:
+        raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    query = select(Accommodation).where(
+        Accommodation.id == accommodation_id,
+        Accommodation.landlord_id == landlord.id
+    )
+    result = await db.execute(query)
+    accommodation = result.scalar_one_or_none()
+
+    if not accommodation:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Listing not found or does not belong to you"
+        )
+
+    # 2. Total views
+    query = select(func.count(AccommodationView.id)).where(
+        AccommodationView.accommodation_id == accommodation_id
+    )
+    result = await db.execute(query)
+    total_views = result.scalar() or 0
+
+    # 3. Reviews stats
+    query = select(Review).where(
+        Review.accommodation_id == accommodation_id,
+        Review.deleted_at == None
+    )
+    result = await db.execute(query)
+    reviews = result.scalars().all()
+
+    total_reviews = len(reviews)
+    average_rating = round(
+        sum(r.rating for r in reviews) / total_reviews, 2
+    ) if total_reviews > 0 else 0.0
+
+    # 4. Sentiment distribution
+    review_ids = [r.id for r in reviews]
+    sentiment_distribution = {"positive": 0, "neutral": 0, "negative": 0}
+
+    if review_ids:
+        query = select(ReviewNLPResult).where(
+            ReviewNLPResult.review_id.in_(review_ids)
+        )
+        result = await db.execute(query)
+        nlp_results = result.scalars().all()
+
+        for nlp in nlp_results:
+            label = nlp.sentiment.lower()
+            if label in sentiment_distribution:
+                sentiment_distribution[label] += 1
+
+        # 5. Average aspect scores
+        all_aspects = {}
+        aspect_counts = {}
+
+        for nlp in nlp_results:
+            if nlp.aspects:
+                for aspect, score in nlp.aspects.items():
+                    if aspect not in all_aspects:
+                        all_aspects[aspect] = 0.0
+                        aspect_counts[aspect] = 0
+                    all_aspects[aspect] += score
+                    aspect_counts[aspect] += 1
+
+        top_aspects = {
+            aspect: round(all_aspects[aspect] / aspect_counts[aspect], 4)
+            for aspect in all_aspects
+        }
+        top_aspects = dict(sorted(
+            top_aspects.items(),
+            key=lambda x: x[1],
+            reverse=True
+        ))
+    else:
+        top_aspects = {}
+
+    return {
+        "accommodation_id": accommodation_id,
+        "total_views": total_views,
+        "total_reviews": total_reviews,
+        "average_rating": average_rating,
+        "sentiment_distribution": sentiment_distribution,
+        "top_aspects": top_aspects
+    }
 
 
 @router.get("/{accommodation_id}", response_model=AccommodationResponse)
