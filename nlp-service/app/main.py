@@ -51,24 +51,29 @@ async def analyze_review(request: ReviewRequest):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Review text cannot be empty")
 
-    text = request.text[:1000]  # Hard cap before tokenisation
+    text = request.text[:1000]
 
     # Sentiment
     sentiment_result = ml_models["sentiment"](text)[0]
-    sentiment_label = sentiment_result["label"].lower()  # positive/neutral/negative
+    sentiment_label = sentiment_result["label"].lower()
     sentiment_score = float(sentiment_result["score"])
 
-    # Toxicity
-    toxicity_result = ml_models["toxicity"](text)[0]
-    is_toxic = toxicity_result["label"] == "toxic" and toxicity_result["score"] > 0.75
-    toxicity_score = float(toxicity_result["score"]) if toxicity_result["label"] == "toxic" else 0.0
+    # Toxicity - only if model is loaded
+    is_toxic = False
+    toxicity_score = 0.0
+    if "toxicity" in ml_models:
+        toxicity_result = ml_models["toxicity"](text)[0]
+        is_toxic = toxicity_result["label"] == "toxic" and toxicity_result["score"] > 0.75
+        toxicity_score = float(toxicity_result["score"]) if toxicity_result["label"] == "toxic" else 0.0
 
-    # Aspect extraction — returns dict of {label: score}
-    aspect_result = ml_models["aspects"](text, ASPECT_LABELS, multi_label=True)
-    aspects = {
-        label: round(float(score), 4)
-        for label, score in zip(aspect_result["labels"], aspect_result["scores"])
-    }
+    # Aspects - only if model is loaded
+    aspects = {}
+    if "aspects" in ml_models:
+        aspect_result = ml_models["aspects"](text, ASPECT_LABELS, multi_label=True)
+        aspects = {
+            label: round(float(score), 4)
+            for label, score in zip(aspect_result["labels"], aspect_result["scores"])
+        }
 
     return {
         "review_id": request.review_id,
