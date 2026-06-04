@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.v1.routes import auth, accommodations, reviews
+from app.api.v1.routes import auth, accommodations, reviews, moderation
 import app.db.models
 
 app = FastAPI(
@@ -10,6 +10,7 @@ app = FastAPI(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(accommodations.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
+app.include_router(moderation.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
