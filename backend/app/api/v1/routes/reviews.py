@@ -1,17 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime, timezone
 from typing import List
 
-from app.db.base import get_db
+from app.db.base import get_db, AsyncSessionLocal
 from app.core.dependencies import get_current_student
 from app.models.user import User
 from app.models.student import Student
 from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.schemas.review import ReviewCreate, ReviewResponse
-from app.worker import analyze_review_task
+from app.services.review_service import process_review_nlp
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 @router.post("", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def submit_review(
     review_in: ReviewCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_student),
     db: AsyncSession = Depends(get_db)
 ):
@@ -82,7 +83,12 @@ async def submit_review(
     await db.refresh(new_review)
 
     # 6. TODO: Trigger NLP task via Celery (next step)
-    analyze_review_task.delay(new_review.id, new_review.body)
+    background_tasks.add_task(
+        process_review_nlp,
+        new_review.id,
+        new_review.body,
+        AsyncSessionLocal()
+    )
 
     return new_review
 
