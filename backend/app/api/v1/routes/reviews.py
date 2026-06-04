@@ -9,8 +9,10 @@ from app.core.dependencies import get_current_student
 from app.models.user import User
 from app.models.student import Student
 from app.models.accommodation import Accommodation
-from app.models.review import Review
-from app.schemas.review import ReviewCreate, ReviewResponse
+from app.models.landlord import Landlord
+from app.core.dependencies import get_current_landlord
+from app.models.review import Review, ReviewReply
+from app.schemas.review import ReviewCreate, ReviewResponse, ReviewReplyCreate, ReviewReplyResponse
 from app.services.review_service import process_review_nlp
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
@@ -137,3 +139,66 @@ async def delete_review(
     review.cooldown_expires_at = now + timedelta(days=14)
 
     await db.commit()
+
+@router.post("/{review_id}/reply", response_model=ReviewReplyResponse, status_code=status.HTTP_201_CREATED)
+async def reply_to_review(
+    review_id: int,
+    reply_in: ReviewReplyCreate,
+    current_user: User = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Get landlord profile
+    query = select(Landlord).where(Landlord.user_id == current_user.id)
+    result = await db.execute(query)
+    landlord = result.scalar_one_or_none()
+
+    if not landlord:
+        raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    # 2. Check review exists and is not deleted
+    query = select(Review).where(
+        Review.id == review_id,
+        Review.deleted_at == None
+    )
+    result = await db.execute(query)
+    review = result.scalar_one_or_none()
+
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    # 3. Check the review is for one of this landlord's accommodations
+    query = select(Accommodation).where(
+        Accommodation.id == review.accommodation_id,
+        Accommodation.landlord_id == landlord.id
+    )
+    result = await db.execute(query)
+    accommodation = result.scalar_one_or_none()
+
+    if not accommodation:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only reply to reviews on your own listings"
+        )
+
+    # 4. Check no reply already exists
+    query = select(ReviewReply).where(ReviewReply.review_id == review_id)
+    result = await db.execute(query)
+    existing_reply = result.scalar_one_or_none()
+
+    if existing_reply:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You have already replied to this review"
+        )
+
+    # 5. Create the reply
+    new_reply = ReviewReply(
+        review_id=review_id,
+        landlord_id=landlord.id,
+        body=reply_in.body
+    )
+    db.add(new_reply)
+    await db.commit()
+    await db.refresh(new_reply)
+
+    return new_reply

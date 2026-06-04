@@ -20,3 +20,16 @@ class ReviewResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ReviewReplyCreate(BaseModel):
+    body: str = Field(..., min_length=10)
+
+class ReviewReplyResponse(BaseModel):
+    id: int
+    review_id: int
+    landlord_id: int
+    body: str
+    created_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
