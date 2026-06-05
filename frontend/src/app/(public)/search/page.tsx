@@ -100,7 +100,7 @@ const SENTIMENT_CONFIG = {
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
 async function fetchUniversities(): Promise<University[]> {
-  const { data } = await api.get("/universities/");
+  const { data } = await api.get("/api/v1/universities/");
   return data;
 }
 
@@ -121,7 +121,7 @@ async function fetchAccommodations(params: {
   query.set("page", String(params.page));
   query.set("page_size", String(PAGE_SIZE));
 
-  const { data } = await api.get(`/accommodations/search?${query.toString()}`);
+  const { data } = await api.get(`/api/v1/accommodations/search?${query.toString()}`);
   return data;
 }
 
