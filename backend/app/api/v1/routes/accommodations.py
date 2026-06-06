@@ -8,7 +8,7 @@ from app.db.base import get_db
 from app.core.dependencies import get_current_landlord
 from app.models.user import User
 from app.models.landlord import Landlord
-from app.models.accommodation import Accommodation, AccommodationView
+from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
 from app.models.university import University
 from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
