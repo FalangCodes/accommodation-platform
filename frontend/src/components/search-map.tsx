@@ -1,7 +1,37 @@
 "use client";
 
 import { useEffect } from "react";
-import { MapPin } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
+// Fix Leaflet default icon issue with Next.js
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+});
+
+// Custom blue marker for listings
+const listingIcon = L.divIcon({
+  className: "",
+  html: `<div style="
+    background: #1F4E79;
+    color: white;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    width: 32px;
+    height: 32px;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  "></div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
 
 interface MapItem {
   id: number;
@@ -10,6 +40,8 @@ interface MapItem {
   price_min: number;
   price_max: number;
   average_rating?: number;
+  lat?: number;
+  lng?: number;
 }
 
 interface SearchMapProps {
@@ -18,115 +50,95 @@ interface SearchMapProps {
   onMarkerClick: (id: number) => void;
 }
 
-export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMapProps) {
+// Component to auto-fit bounds when items change
+function FitBounds({ items }: { items: MapItem[] }) {
+  const map = useMap();
   useEffect(() => {
-    // Dynamically import Leaflet only on client
-    let map: any = null;
+    const validItems = items.filter(
+      (i) => i.lat !== undefined && i.lng !== undefined
+    );
+    if (validItems.length === 0) return;
+    if (validItems.length === 1) {
+      map.setView([validItems[0].lat!, validItems[0].lng!], 14);
+      return;
+    }
+    const bounds = L.latLngBounds(
+      validItems.map((i) => [i.lat!, i.lng!])
+    );
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }, [items, map]);
+  return null;
+}
 
-    const initMap = async () => {
-      const L = (await import("leaflet")).default;
-      await import("leaflet/dist/leaflet.css");
+export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMapProps) {
+  const validItems = items.filter(
+    (i) => i.lat !== undefined && i.lng !== undefined && i.lat !== 0 && i.lng !== 0
+  );
 
-      // Fix default marker icon paths broken by webpack
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-      });
-
-      const container = document.getElementById("search-map-container");
-      if (!container || (container as any)._leaflet_id) return;
-
-      // Default center: SPU Kimberley
-      map = L.map("search-map-container").setView([-28.7282, 24.7435], 13);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
-
-      // Custom marker icon
-      const customIcon = L.divIcon({
-        className: "",
-        html: `<div style="
-          background: #0f172a;
-          color: white;
-          border-radius: 50% 50% 50% 0;
-          transform: rotate(-45deg);
-          width: 32px;
-          height: 32px;
-          border: 3px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        "></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -36],
-      });
-
-      items.forEach((item) => {
-        // NOTE: accommodation objects need lat/lng — this requires the backend
-        // to return coordinates in the search response. For now we show a
-        // placeholder at SPU coordinates offset by index.
-        // TODO: add lat/lng fields to AccommodationOut schema.
-        const lat = -28.7282 + (Math.random() - 0.5) * 0.05;
-        const lng = 24.7435 + (Math.random() - 0.5) * 0.05;
-
-        const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
-
-        marker.bindPopup(`
-          <div style="min-width: 180px; font-family: system-ui, sans-serif;">
-            <p style="font-weight: 600; font-size: 14px; margin: 0 0 4px;">${item.title}</p>
-            <p style="font-size: 12px; color: #64748b; margin: 0 0 6px;">${item.address}</p>
-            <p style="font-size: 13px; font-weight: 600; margin: 0 0 8px; color: #0f172a;">
-              R${item.price_min.toLocaleString()} / month
-            </p>
-            <button
-              onclick="window._accomFindNav(${item.id})"
-              style="
-                background: #0f172a; color: white; border: none;
-                padding: 6px 14px; border-radius: 8px;
-                font-size: 12px; font-weight: 500; cursor: pointer; width: 100%;
-              "
-            >View listing</button>
-          </div>
-        `);
-      });
-
-      // Expose navigation callback for popup buttons
-      (window as any)._accomFindNav = onMarkerClick;
-    };
-
-    initMap();
-
-    return () => {
-      if (map) {
-        map.remove();
-      }
-      delete (window as any)._accomFindNav;
-    };
-  }, [items]);
+  // Default center — South Africa
+  const defaultCenter: [number, number] = [-28.7282, 24.7435];
 
   if (isLoading) {
     return (
       <div className="w-full h-[600px] rounded-2xl bg-slate-100 animate-pulse flex items-center justify-center">
-        <MapPin className="w-8 h-8 text-slate-300" />
+        <p className="text-slate-400">Loading map...</p>
+      </div>
+    );
+  }
+
+  if (validItems.length === 0) {
+    return (
+      <div className="w-full h-[600px] rounded-2xl bg-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-500 font-medium">No listings to show on map</p>
+          <p className="text-slate-400 text-sm mt-1">Try adjusting your search filters</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative">
-      <div
-        id="search-map-container"
-        className="w-full h-[600px] rounded-2xl overflow-hidden border border-slate-200 shadow-sm z-0"
-      />
-      <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 text-xs text-slate-500 border border-slate-200 shadow-sm">
-        ⚠️ Map positions are approximate until coordinates are returned from the API
-      </div>
+    <div className="w-full h-[600px] rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+      <MapContainer
+        center={defaultCenter}
+        zoom={12}
+        style={{ height: "100%", width: "100%" }}
+        scrollWheelZoom={true}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <FitBounds items={validItems} />
+        {validItems.map((item) => (
+          <Marker
+            key={item.id}
+            position={[item.lat!, item.lng!]}
+            icon={listingIcon}
+          >
+            <Popup>
+              <div className="min-w-[200px]">
+                <p className="font-semibold text-slate-900 text-sm mb-1 leading-snug">
+                  {item.title}
+                </p>
+                <p className="text-xs text-slate-500 mb-2">{item.address}</p>
+                <p className="text-sm font-bold text-slate-900 mb-3">
+                  R{item.price_min.toLocaleString()}
+                  {item.price_max > item.price_min &&
+                    ` – R${item.price_max.toLocaleString()}`}
+                  <span className="text-xs font-normal text-slate-400"> /month</span>
+                </p>
+                <Link
+                  href={`/listings/${item.id}`}
+                  className="block text-center text-xs font-semibold text-white bg-[#1F4E79] hover:bg-[#163a5e] rounded-lg py-1.5 px-3 transition-colors"
+                >
+                  View listing
+                </Link>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
     </div>
   );
 }

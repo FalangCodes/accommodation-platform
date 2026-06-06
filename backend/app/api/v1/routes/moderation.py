@@ -10,6 +10,10 @@ from app.models.user import User
 from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.models.moderation import ModerationLog
+from datetime import datetime, timezone
+from app.models.moderation import ModerationQueue, ModerationLog, Appeal
+from app.core.dependencies import get_current_moderator
+from app.schemas.moderation import AppealOut, AppealResolveBody
 
 router = APIRouter(prefix="/moderation", tags=["Moderation"])
 
@@ -137,3 +141,89 @@ async def get_pending_listings(
         }
         for l in listings
     ]
+
+# ── MODERATION LOG ────────────────────────────────────────────────────────────
+
+@router.get("/log")
+async def get_moderation_log(
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(ModerationLog).order_by(ModerationLog.created_at.desc())
+    )
+    logs = result.scalars().all()
+    return [
+        {
+            "id": l.id,
+            "moderator_id": l.moderator_id,
+            "action": l.action,
+            "resource_type": l.resource_type,
+            "resource_id": l.resource_id,
+            "reason": l.reason,
+            "created_at": l.created_at,
+        }
+        for l in logs
+    ]
+
+
+# ── APPEALS (admin only) ──────────────────────────────────────────────────────
+
+@router.get("/appeals")
+async def get_pending_appeals(
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Appeal).where(Appeal.status == "pending").order_by(Appeal.id.asc())
+    )
+    appeals = result.scalars().all()
+    return [
+        {
+            "id": a.id,
+            "appellant_id": a.appellant_id,
+            "appellant_role": a.appellant_role,
+            "resource_type": a.resource_type,
+            "resource_id": a.resource_id,
+            "original_action_id": a.original_action_id,
+            "reason": a.reason,
+            "status": a.status,
+            "assigned_admin_id": a.assigned_admin_id,
+            "resolved_at": a.resolved_at,
+        }
+        for a in appeals
+    ]
+
+
+@router.patch("/appeals/{appeal_id}/resolve")
+async def resolve_appeal(
+    appeal_id: int,
+    body: AppealResolveBody,
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    if body.decision not in ("upheld", "dismissed"):
+        raise HTTPException(status_code=400, detail="Decision must be 'upheld' or 'dismissed'")
+
+    result = await db.execute(select(Appeal).where(Appeal.id == appeal_id))
+    appeal = result.scalar_one_or_none()
+    if not appeal:
+        raise HTTPException(status_code=404, detail="Appeal not found")
+    if appeal.status != "pending":
+        raise HTTPException(status_code=400, detail="Appeal already resolved")
+
+    appeal.status = body.decision
+    appeal.assigned_admin_id = current_user.id
+    appeal.resolved_at = datetime.now(timezone.utc)
+
+    log_entry = ModerationLog(
+        moderator_id=current_user.id,
+        action=f"appeal_{body.decision}",
+        resource_type=appeal.resource_type,
+        resource_id=appeal.resource_id,
+        reason=body.reason,
+    )
+    db.add(log_entry)
+    await db.commit()
+
+    return {"detail": f"Appeal {body.decision}", "appeal_id": appeal_id}
