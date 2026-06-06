@@ -9,6 +9,25 @@ class ReviewCreate(BaseModel):
     body: str = Field(..., min_length=50)
 
 
+class ReviewReplyResponse(BaseModel):
+    id: int
+    review_id: int
+    landlord_id: int
+    body: str
+    created_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class NLPResultResponse(BaseModel):
+    sentiment: Optional[str]
+    sentiment_score: Optional[float]
+    aspects: Optional[dict]
+    spam_flag: Optional[bool]
+
+    model_config = {"from_attributes": True}
+
+
 class ReviewResponse(BaseModel):
     id: int
     student_id: int
@@ -17,19 +36,11 @@ class ReviewResponse(BaseModel):
     body: str
     status: str
     created_at: Optional[datetime]
+    nlp: Optional[NLPResultResponse] = None
+    reply: Optional[ReviewReplyResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+
 
 class ReviewReplyCreate(BaseModel):
     body: str = Field(..., min_length=10)
-
-class ReviewReplyResponse(BaseModel):
-    id: int
-    review_id: int
-    landlord_id: int
-    body: str
-    created_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True

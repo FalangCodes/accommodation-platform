@@ -11,7 +11,7 @@ from app.models.student import Student
 from app.models.accommodation import Accommodation
 from app.models.landlord import Landlord
 from app.core.dependencies import get_current_landlord
-from app.models.review import Review, ReviewReply
+from app.models.review import Review, ReviewReply, ReviewNLPResult
 from app.schemas.review import ReviewCreate, ReviewResponse, ReviewReplyCreate, ReviewReplyResponse
 from app.services.review_service import process_review_nlp
 
@@ -95,17 +95,64 @@ async def submit_review(
     return new_review
 
 
-@router.get("/accommodation/{accommodation_id}", response_model=List[ReviewResponse])
+@router.get("/accommodation/{accommodation_id}")
 async def get_reviews_for_accommodation(
     accommodation_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Review).where(
-        Review.accommodation_id == accommodation_id,
-        Review.deleted_at == None
+    result = await db.execute(
+        select(Review).where(
+            Review.accommodation_id == accommodation_id,
+            Review.deleted_at == None
+        ).order_by(Review.created_at.desc())
     )
-    result = await db.execute(query)
-    return result.scalars().all()
+    reviews = result.scalars().all()
+
+    if not reviews:
+        return []
+
+    review_ids = [r.id for r in reviews]
+
+    # Fetch NLP results
+    nlp_result = await db.execute(
+        select(ReviewNLPResult).where(ReviewNLPResult.review_id.in_(review_ids))
+    )
+    nlp_map = {n.review_id: n for n in nlp_result.scalars().all()}
+
+    # Fetch replies
+    reply_result = await db.execute(
+        select(ReviewReply).where(ReviewReply.review_id.in_(review_ids))
+    )
+    reply_map = {r.review_id: r for r in reply_result.scalars().all()}
+
+    output = []
+    for review in reviews:
+        nlp = nlp_map.get(review.id)
+        reply = reply_map.get(review.id)
+        output.append({
+            "id": review.id,
+            "student_id": review.student_id,
+            "accommodation_id": review.accommodation_id,
+            "rating": review.rating,
+            "body": review.body,
+            "status": review.status,
+            "created_at": review.created_at,
+            "nlp": {
+                "sentiment": nlp.sentiment,
+                "sentiment_score": nlp.sentiment_score,
+                "aspects": nlp.aspects,
+                "spam_flag": nlp.spam_flag,
+            } if nlp else None,
+            "reply": {
+                "id": reply.id,
+                "review_id": reply.review_id,
+                "landlord_id": reply.landlord_id,
+                "body": reply.body,
+                "created_at": reply.created_at,
+            } if reply else None,
+        })
+
+    return output
 
 
 @router.delete("/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
