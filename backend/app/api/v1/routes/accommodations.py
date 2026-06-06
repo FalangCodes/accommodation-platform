@@ -144,7 +144,7 @@ async def search_accommodations(
             {where_extra}
             GROUP BY a.id, a.landlord_id, a.title, a.description,
                      a.address, a.price_min, a.price_max, a.status, a.created_at,
-                     a.location
+                     a.location, u.campus_location
             {having_clause}
         ) AS subq
     """)
@@ -157,7 +157,7 @@ async def search_accommodations(
         {where_extra}
         GROUP BY a.id, a.landlord_id, a.title, a.description,
                  a.address, a.price_min, a.price_max, a.status, a.created_at,
-                 a.location
+                 a.location, u.campus_location
         {having_clause}
         {order_clause}
         LIMIT :limit OFFSET :offset
