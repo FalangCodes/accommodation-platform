@@ -267,14 +267,102 @@ async def get_analytics(
     }
 
 
-@router.get("/{accommodation_id}", response_model=AccommodationResponse)
+@router.get("/{accommodation_id}")
 async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(get_db)):
-    query = select(Accommodation).where(Accommodation.id == accommodation_id)
-    result = await db.execute(query)
+    # 1. Base accommodation
+    result = await db.execute(
+        select(Accommodation).where(Accommodation.id == accommodation_id)
+    )
     accommodation = result.scalar_one_or_none()
-
     if not accommodation:
         raise HTTPException(status_code=404, detail="Accommodation not found")
 
-    return accommodation
+    # 2. Coordinates from PostGIS
+    coords_result = await db.execute(
+        text("SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM accommodations WHERE id = :id"),
+        {"id": accommodation_id}
+    )
+    coords = coords_result.mappings().one_or_none()
+
+    # 3. Images
+    images_result = await db.execute(
+        select(AccommodationImage)
+        .where(AccommodationImage.accommodation_id == accommodation_id)
+        .order_by(AccommodationImage.display_order)
+    )
+    images = images_result.scalars().all()
+
+    # 4. Landlord display name
+    from app.models.landlord import Landlord
+    landlord_result = await db.execute(
+        select(Landlord).where(Landlord.id == accommodation.landlord_id)
+    )
+    landlord = landlord_result.scalar_one_or_none()
+
+    # 5. Reviews stats + NLP summary
+    reviews_result = await db.execute(
+        select(Review).where(
+            Review.accommodation_id == accommodation_id,
+            Review.deleted_at == None
+        )
+    )
+    reviews = reviews_result.scalars().all()
+    total_reviews = len(reviews)
+    average_rating = round(
+        sum(r.rating for r in reviews) / total_reviews, 2
+    ) if total_reviews > 0 else None
+
+    # 6. NLP sentiment distribution
+    sentiment_distribution = {"positive": 0, "neutral": 0, "negative": 0}
+    top_aspects = {}
+
+    if reviews:
+        review_ids = [r.id for r in reviews]
+        nlp_result = await db.execute(
+            select(ReviewNLPResult).where(ReviewNLPResult.review_id.in_(review_ids))
+        )
+        nlp_results = nlp_result.scalars().all()
+
+        aspect_totals: dict = {}
+        aspect_counts: dict = {}
+
+        for nlp in nlp_results:
+            label = (nlp.sentiment or "").lower()
+            if label in sentiment_distribution:
+                sentiment_distribution[label] += 1
+            if nlp.aspects:
+                for aspect, score in nlp.aspects.items():
+                    aspect_totals[aspect] = aspect_totals.get(aspect, 0.0) + score
+                    aspect_counts[aspect] = aspect_counts.get(aspect, 0) + 1
+
+        top_aspects = {
+            k: round(aspect_totals[k] / aspect_counts[k], 4)
+            for k in aspect_totals
+        }
+        top_aspects = dict(sorted(top_aspects.items(), key=lambda x: x[1], reverse=True))
+
+    # Dominant sentiment
+    dominant_sentiment = max(sentiment_distribution, key=sentiment_distribution.get) \
+        if total_reviews > 0 else None
+
+    return {
+        "id": accommodation.id,
+        "landlord_id": accommodation.landlord_id,
+        "landlord_name": landlord.display_name if landlord else None,
+        "title": accommodation.title,
+        "description": accommodation.description,
+        "address": accommodation.address,
+        "price_min": accommodation.price_min,
+        "price_max": accommodation.price_max,
+        "status": accommodation.status,
+        "created_at": accommodation.created_at,
+        "lat": coords["lat"] if coords else None,
+        "lng": coords["lng"] if coords else None,
+        "images": [{"id": img.id, "url": img.blob_url, "order": img.display_order} for img in images],
+        "total_reviews": total_reviews,
+        "average_rating": average_rating,
+        "dominant_sentiment": dominant_sentiment,
+        "sentiment_distribution": sentiment_distribution,
+        "top_aspects": top_aspects,
+    }
 
