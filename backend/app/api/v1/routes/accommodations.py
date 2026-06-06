@@ -65,15 +65,14 @@ async def search_accommodations(
     db: AsyncSession = Depends(get_db)
 ):
     page = max(1, page)
-    page_size = min(max(1, page_size), 50)  # cap at 50
+    page_size = min(max(1, page_size), 50)
     offset = (page - 1) * page_size
+    params: dict = {}
 
     if university_id:
-        # PostGIS radius search centred on university
         query = select(University).where(University.id == university_id)
         result = await db.execute(query)
         university = result.scalar_one_or_none()
-
         if not university:
             raise HTTPException(status_code=404, detail="University not found")
 
@@ -92,14 +91,15 @@ async def search_accommodations(
             WHERE a.status = 'approved'
             AND ST_DWithin(a.location, u.campus_location, :radius_meters)
         """
-        params: dict = {
-            "university_id": university_id,
-            "radius_meters": radius_km * 1000,
-        }
-        order_clause = "ORDER BY ST_Distance(a.location, u.campus_location)"
-
+        group_by = """
+            GROUP BY a.id, a.landlord_id, a.title, a.description,
+                     a.address, a.price_min, a.price_max, a.status, a.created_at,
+                     a.location, u.campus_location
+        """
+        order_by = "ORDER BY ST_Distance(a.location, u.campus_location)"
+        params["university_id"] = university_id
+        params["radius_meters"] = radius_km * 1000
     else:
-        # No university — return all approved listings
         base_sql = """
             SELECT
                 a.id, a.landlord_id, a.title, a.description, a.address,
@@ -113,53 +113,47 @@ async def search_accommodations(
             LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL
             WHERE a.status = 'approved'
         """
-        params = {}
-        order_clause = "ORDER BY a.created_at DESC"
+        group_by = """
+            GROUP BY a.id, a.landlord_id, a.title, a.description,
+                     a.address, a.price_min, a.price_max, a.status, a.created_at,
+                     a.location
+        """
+        order_by = "ORDER BY a.created_at DESC"
 
-    # ── Optional filters ──────────────────────────────────────────────────────
+    # Optional filters
     filter_clauses = []
-
     if price_min is not None:
         filter_clauses.append("a.price_max >= :price_min")
         params["price_min"] = price_min
-
     if price_max is not None:
         filter_clauses.append("a.price_min <= :price_max")
         params["price_max"] = price_max
+    where_extra = (" AND " + " AND ".join(filter_clauses)) if filter_clauses else ""
 
-    where_extra = ""
-    if filter_clauses:
-        where_extra = " AND " + " AND ".join(filter_clauses)
-
-    # ── Wrap in HAVING for min_rating (post-aggregation) ─────────────────────
     having_clause = ""
     if min_rating is not None:
         having_clause = "HAVING COALESCE(AVG(r.rating), 0) >= :min_rating"
         params["min_rating"] = min_rating
 
-    # ── Count query (total rows, no pagination) ───────────────────────────────
+    # Count
     count_sql = text(f"""
         SELECT COUNT(*) FROM (
             {base_sql}
             {where_extra}
-            GROUP BY a.id, a.landlord_id, a.title, a.description,
-                     a.address, a.price_min, a.price_max, a.status, a.created_at,
-                     a.location, u.campus_location
+            {group_by}
             {having_clause}
         ) AS subq
     """)
     count_result = await db.execute(count_sql, params)
     total = count_result.scalar() or 0
 
-    # ── Main paginated query ──────────────────────────────────────────────────
+    # Paginated results
     main_sql = text(f"""
         {base_sql}
         {where_extra}
-        GROUP BY a.id, a.landlord_id, a.title, a.description,
-                 a.address, a.price_min, a.price_max, a.status, a.created_at,
-                 a.location, u.campus_location
+        {group_by}
         {having_clause}
-        {order_clause}
+        {order_by}
         LIMIT :limit OFFSET :offset
     """)
     params["limit"] = page_size
@@ -168,10 +162,8 @@ async def search_accommodations(
     result = await db.execute(main_sql, params)
     rows = result.mappings().all()
 
-    items = [dict(row) for row in rows]
-
     return {
-        "items": items,
+        "items": [dict(row) for row in rows],
         "total": total,
         "page": page,
         "page_size": page_size,
