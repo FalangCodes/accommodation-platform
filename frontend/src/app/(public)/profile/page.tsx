@@ -7,7 +7,6 @@ import { reviewsApi } from "@/lib/api";
 import PageLayout from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import {
   GraduationCap,
   Star,
@@ -16,6 +15,10 @@ import {
   ShieldCheck,
   Loader2,
   AlertTriangle,
+  User,
+  Mail,
+  BookOpen,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -30,11 +33,11 @@ import {
 interface Review {
   id: number;
   accommodation_id: number;
+  accommodation_title: string;
   rating: number;
   body: string;
   status: string;
   created_at: string;
-  deleted_at: string | null;
 }
 
 export default function ProfilePage() {
@@ -46,14 +49,10 @@ export default function ProfilePage() {
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Redirect if not logged in or not a student
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login?redirect=/profile");
-    }
+    if (!loading && !user) router.push("/login?redirect=/profile");
   }, [user, loading]);
 
-  // Load student's reviews
   useEffect(() => {
     if (!user || !isStudent) return;
     reviewsApi
@@ -78,11 +77,15 @@ export default function ProfilePage() {
     }
   };
 
+  const averageRating = reviews.length > 0
+    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+    : null;
+
   if (loading) {
     return (
       <PageLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-[#1F4E79]" />
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
         </div>
       </PageLayout>
     );
@@ -90,60 +93,91 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
+  const username = user.email.split("@")[0];
+
   return (
     <PageLayout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-6">
 
         {/* ── Profile header ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-start gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-[#1F4E79] flex items-center justify-center text-white text-2xl font-bold shrink-0">
-              {user.email[0].toUpperCase()}
+            <div className="h-16 w-16 rounded-2xl bg-slate-900 flex items-center justify-center text-white text-2xl font-bold shrink-0">
+              {username[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-gray-900 truncate">
-                {user.email.split("@")[0]}
+              <h1 className="text-xl font-bold text-slate-900 truncate capitalize">
+                {username}
               </h1>
-              <p className="text-sm text-gray-500 truncate mt-0.5">{user.email}</p>
+              <p className="text-sm text-slate-500 truncate mt-0.5 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5" />
+                {user.email}
+              </p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <Badge className="bg-[#E6F1FB] text-[#1F4E79] border-0 gap-1.5">
+                <Badge className="bg-slate-100 text-slate-700 border-0 gap-1.5 rounded-full">
                   <GraduationCap className="h-3.5 w-3.5" />
                   Student
                 </Badge>
-                <Badge className="bg-green-50 text-green-700 border-0 gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Verified
-                </Badge>
+                {user.is_active ? (
+                  <Badge className="bg-emerald-50 text-emerald-700 border-0 gap-1.5 rounded-full">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-50 text-amber-700 border-0 gap-1.5 rounded-full">
+                    <Clock className="h-3.5 w-3.5" />
+                    Pending verification
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
+
+          {/* Stats row */}
+          {reviews.length > 0 && (
+            <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-100">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-slate-900">{reviews.length}</div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  Review{reviews.length !== 1 ? "s" : ""} submitted
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-slate-900 flex items-center justify-center gap-1.5">
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                  {averageRating}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Average rating given</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── My Reviews ── */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">My Reviews</h2>
-            <span className="text-sm text-gray-400">
+            <h2 className="text-lg font-bold text-slate-900">My Reviews</h2>
+            <span className="text-sm text-slate-400">
               {reviews.length} review{reviews.length !== 1 ? "s" : ""}
             </span>
           </div>
 
           {reviewsLoading ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-[#1F4E79]" />
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
             </div>
           ) : reviews.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-              <div className="h-14 w-14 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto mb-4">
-                <Star className="h-6 w-6 text-gray-300" />
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <BookOpen className="h-7 w-7 text-slate-300" />
               </div>
-              <p className="font-semibold text-gray-900 mb-1">No reviews yet</p>
-              <p className="text-sm text-gray-500 mb-5">
-                Find accommodation and share your experience with other students.
+              <p className="font-semibold text-slate-900 mb-1">No reviews yet</p>
+              <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">
+                Find accommodation near your campus and share your experience with other students.
               </p>
               <Button
                 onClick={() => router.push("/search")}
-                className="bg-[#1F4E79] hover:bg-[#163a5e] text-white rounded-xl"
+                className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl"
               >
                 Find accommodation
               </Button>
@@ -151,47 +185,44 @@ export default function ProfilePage() {
           ) : (
             <div className="flex flex-col gap-4">
               {reviews.map((review) => (
-                <Card
+                <div
                   key={review.id}
-                  className="p-5 border border-gray-100 shadow-sm rounded-2xl"
+                  className="bg-white rounded-2xl border border-slate-200 p-5"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
+
+                      {/* Accommodation name */}
+                      <button
+                        onClick={() => router.push(`/listings/${review.accommodation_id}`)}
+                        className="text-sm font-semibold text-slate-900 hover:text-slate-600 transition-colors mb-2 text-left line-clamp-1"
+                      >
+                        {review.accommodation_title}
+                      </button>
 
                       {/* Rating */}
                       <div className="flex items-center gap-1 mb-2">
                         {Array.from({ length: 5 }).map((_, i) => (
                           <Star
                             key={i}
-                            className={`h-4 w-4 ${
+                            className={`h-3.5 w-3.5 ${
                               i < review.rating
                                 ? "fill-amber-400 text-amber-400"
-                                : "text-gray-200"
+                                : "text-slate-200 fill-slate-200"
                             }`}
                           />
                         ))}
-                        <span className="text-sm text-gray-500 ml-1.5">
-                          {review.rating}/5
-                        </span>
+                        <span className="text-xs text-slate-400 ml-1">{review.rating}/5</span>
                       </div>
 
                       {/* Body */}
-                      <p className="text-sm text-gray-700 leading-relaxed line-clamp-3 mb-3">
+                      <p className="text-sm text-slate-600 leading-relaxed line-clamp-2 mb-3">
                         {review.body}
                       </p>
 
                       {/* Meta */}
                       <div className="flex items-center gap-3 flex-wrap">
-                        <button
-                          onClick={() =>
-                            router.push(`/listings/${review.accommodation_id}`)
-                          }
-                          className="flex items-center gap-1.5 text-xs text-[#1F4E79] hover:underline"
-                        >
-                          <MapPin className="h-3 w-3" />
-                          View listing
-                        </button>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-slate-400">
                           {new Date(review.created_at).toLocaleDateString("en-ZA", {
                             year: "numeric",
                             month: "long",
@@ -199,27 +230,27 @@ export default function ProfilePage() {
                           })}
                         </span>
                         <Badge
-                          className={`text-xs border-0 ${
+                          className={`text-xs border-0 rounded-full ${
                             review.status === "analysed"
-                              ? "bg-green-50 text-green-700"
+                              ? "bg-emerald-50 text-emerald-700"
                               : "bg-amber-50 text-amber-700"
                           }`}
                         >
-                          {review.status === "analysed" ? "Analysed" : "Pending analysis"}
+                          {review.status === "analysed" ? "✓ Analysed" : "⏳ Pending analysis"}
                         </Badge>
                       </div>
                     </div>
 
-                    {/* Delete */}
+                    {/* Delete button */}
                     <button
                       onClick={() => setDeleteTarget(review.id)}
-                      className="shrink-0 p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      className="shrink-0 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                       title="Delete review"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </Card>
+                </div>
               ))}
             </div>
           )}
@@ -235,7 +266,8 @@ export default function ProfilePage() {
             </div>
             <DialogTitle className="text-center">Delete this review?</DialogTitle>
             <DialogDescription className="text-center text-sm">
-              You won't be able to re-review this accommodation for <strong>14 days</strong> after deletion.
+              You won't be able to re-review this accommodation for{" "}
+              <strong>14 days</strong> after deletion.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 mt-2">

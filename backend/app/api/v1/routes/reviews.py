@@ -250,7 +250,7 @@ async def reply_to_review(
 
     return new_reply
 
-@router.get("/my", response_model=List[ReviewResponse])
+@router.get("/my")
 async def get_my_reviews(
     current_user: User = Depends(get_current_student),
     db: AsyncSession = Depends(get_db)
@@ -260,12 +260,35 @@ async def get_my_reviews(
     student = result.scalar_one_or_none()
 
     if not student:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+
+    result = await db.execute(
+        select(Review).where(
+            Review.student_id == student.id,
+            Review.deleted_at == None
+        ).order_by(Review.created_at.desc())
+    )
+    reviews = result.scalars().all()
+
+    if not reviews:
         return []
 
-    query = select(Review).where(
-        Review.student_id == student.id,
-        Review.deleted_at == None
-    ).order_by(Review.id.desc())
+    # Fetch accommodation titles
+    accommodation_ids = [r.accommodation_id for r in reviews]
+    acc_result = await db.execute(
+        select(Accommodation).where(Accommodation.id.in_(accommodation_ids))
+    )
+    acc_map = {a.id: a for a in acc_result.scalars().all()}
 
-    result = await db.execute(query)
-    return result.scalars().all()
+    return [
+        {
+            "id": r.id,
+            "accommodation_id": r.accommodation_id,
+            "accommodation_title": acc_map.get(r.accommodation_id, {}).title if acc_map.get(r.accommodation_id) else "Unknown listing",
+            "rating": r.rating,
+            "body": r.body,
+            "status": r.status,
+            "created_at": r.created_at,
+        }
+        for r in reviews
+    ]

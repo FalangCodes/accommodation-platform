@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import PageLayout from "@/components/page-layout";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -311,6 +312,7 @@ export default function ListingDetailPage() {
   }
 
   return (
+    <PageLayout>
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -613,5 +615,6 @@ export default function ListingDetailPage() {
         </div>
       </div>
     </div>
+    </PageLayout>
   );
 }

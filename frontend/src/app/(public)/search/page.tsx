@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import PageLayout from "@/components/page-layout";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -531,6 +532,7 @@ export default function SearchPage() {
   };
 
   return (
+    <PageLayout>
     <div className="min-h-screen bg-slate-50">
       {/* ── Header strip ── */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
@@ -748,5 +750,6 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+    </PageLayout>
   );
 }
