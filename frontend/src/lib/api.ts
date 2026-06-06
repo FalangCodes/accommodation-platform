@@ -87,6 +87,8 @@ export const reviewsApi = {
 
   reply: (review_id: number, body: string) =>
     api.post(`/api/v1/reviews/${review_id}/reply`, { body }),
+
+  getMyReviews: () => api.get("/api/v1/reviews/my"),
 };
 
 // ── MODERATION ────────────────────────────────────────────────────────────────

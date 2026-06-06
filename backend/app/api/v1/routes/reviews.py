@@ -249,3 +249,23 @@ async def reply_to_review(
     await db.refresh(new_reply)
 
     return new_reply
+
+@router.get("/my", response_model=List[ReviewResponse])
+async def get_my_reviews(
+    current_user: User = Depends(get_current_student),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Student).where(Student.user_id == current_user.id)
+    result = await db.execute(query)
+    student = result.scalar_one_or_none()
+
+    if not student:
+        return []
+
+    query = select(Review).where(
+        Review.student_id == student.id,
+        Review.deleted_at == None
+    ).order_by(Review.id.desc())
+
+    result = await db.execute(query)
+    return result.scalars().all()

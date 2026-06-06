@@ -510,7 +510,7 @@ export default function ListingDetailPage() {
                 <div className="bg-white border border-slate-200 rounded-2xl p-5">
                   <div className="flex items-center gap-2 mb-4">
                     <TrendingUp className="w-4 h-4 text-slate-500" />
-                    <h3 className="font-semibold text-slate-900 text-sm">NLP Summary</h3>
+                    <h3 className="font-semibold text-slate-900 text-sm">Get A.I Summary</h3>
                   </div>
 
                   {listing.total_reviews === 0 ? (
@@ -552,7 +552,7 @@ export default function ListingDetailPage() {
                       {/* Aspect breakdown — blurred for guests */}
                       <div className="relative">
                         <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-                          Aspect Breakdown
+                          Common Aspects In Reviews
                         </h4>
                         <div className={`space-y-2.5 ${isGuest ? "blur-sm select-none" : ""}`}>
                           {Object.entries(listing.top_aspects).map(([aspect, score]) => {
