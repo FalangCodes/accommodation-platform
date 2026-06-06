@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379")
     NLP_SERVICE_URL: str = os.getenv("NLP_SERVICE_URL", "http://nlp:8001")
     DEFAULT_SEARCH_RADIUS_KM: int = 5
+    MODERATOR_INVITE_KEY: str = "change-me-in-env"
 
     class Config:
         env_file = ".env"

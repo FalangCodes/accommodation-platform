@@ -36,3 +36,8 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+class ModeratorCreate(BaseModel):
+    email: str
+    password: str
+    invite_key: str  # must match env var MODERATOR_INVITE_KEY

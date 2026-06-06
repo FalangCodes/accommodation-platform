@@ -10,6 +10,8 @@ from app.models.university import University
 from app.core.dependencies import get_current_user
 from app.models.landlord import Landlord
 from app.schemas.auth import LandlordCreate
+from app.schemas.auth import ModeratorCreate
+from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -156,6 +158,38 @@ async def register_landlord(landlord_in: LandlordCreate, db: AsyncSession = Depe
         contact_phone=landlord_in.contact_phone
     )
     db.add(new_landlord)
+    await db.commit()
+    await db.refresh(new_user)
+
+    return new_user
+
+@router.post("/register/moderator", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register_moderator(moderator_in: ModeratorCreate, db: AsyncSession = Depends(get_db)):
+
+    # 1. Validate invite key
+    if moderator_in.invite_key != settings.MODERATOR_INVITE_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid invite key"
+        )
+
+    # 2. Check if user already exists
+    query = select(User).where(User.email == moderator_in.email)
+    result = await db.execute(query)
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists."
+        )
+
+    # 3. Create the moderator user
+    new_user = User(
+        email=moderator_in.email,
+        password_hash=get_password_hash(moderator_in.password),
+        role="moderator",
+        is_active=True
+    )
+    db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
 
