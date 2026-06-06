@@ -208,7 +208,7 @@ function ListingCard({
         )}
 
         {/* Distance badge */}
-        {item.distance_km !== undefined && (
+        {item.distance_km !== undefined && item.distance_km !== null && item.distance_km > 0 && (
           <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-xs font-medium text-slate-700 px-2.5 py-1 rounded-full border border-white/60 shadow-sm">
             {item.distance_km < 1
               ? `${Math.round(item.distance_km * 1000)}m away`
