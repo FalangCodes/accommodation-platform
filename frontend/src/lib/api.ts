@@ -75,6 +75,16 @@ export const accommodationsApi = {
   analytics: (id: number) => api.get(`/api/v1/accommodations/${id}/analytics`),
 
   myListings: () => api.get("/api/v1/accommodations/my"),
+
+  uploadImage: (accommodationId: number, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return api.post(`/api/v1/accommodations/${accommodationId}/images`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  },
+  deleteImage: (accommodationId: number, imageId: number) =>
+    api.delete(`/api/v1/accommodations/${accommodationId}/images/${imageId}`),
 };
 
 // ── REVIEWS ───────────────────────────────────────────────────────────────────
@@ -111,3 +121,4 @@ export const moderationApi = {
 export const universitiesApi = {
   list: () => api.get("/api/v1/universities"),
 };
+

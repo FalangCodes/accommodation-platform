@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     NLP_SERVICE_URL: str = os.getenv("NLP_SERVICE_URL", "http://nlp:8001")
     DEFAULT_SEARCH_RADIUS_KM: int = 5
     MODERATOR_INVITE_KEY: str = "change-me-in-env"
+    AZURE_STORAGE_CONNECTION_STRING: str = ""
+    AZURE_STORAGE_CONTAINER_NAME: str = "listing-images"
 
     class Config:
         env_file = ".env"

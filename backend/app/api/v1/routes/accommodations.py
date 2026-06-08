@@ -1,5 +1,5 @@
 from sqlalchemy import text, func
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
@@ -12,6 +12,7 @@ from app.models.accommodation import Accommodation, AccommodationView, Accommoda
 from app.models.university import University
 from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
+from app.services.storage_service import upload_image, delete_image
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
 
@@ -417,3 +418,95 @@ async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(ge
         "top_aspects": top_aspects,
     }
 
+@router.post("/{accommodation_id}/images")
+async def upload_accommodation_image(
+    accommodation_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Verify landlord owns this listing
+    result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
+    landlord = result.scalar_one_or_none()
+    if not landlord:
+        raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    result = await db.execute(
+        select(Accommodation).where(
+            Accommodation.id == accommodation_id,
+            Accommodation.landlord_id == landlord.id
+        )
+    )
+    accommodation = result.scalar_one_or_none()
+    if not accommodation:
+        raise HTTPException(status_code=403, detail="Listing not found or does not belong to you")
+
+    # 2. Check image count limit
+    result = await db.execute(
+        select(func.count(AccommodationImage.id)).where(
+            AccommodationImage.accommodation_id == accommodation_id
+        )
+    )
+    count = result.scalar() or 0
+    if count >= 8:
+        raise HTTPException(status_code=400, detail="Maximum of 8 images per listing reached")
+
+    # 3. Validate file type
+    allowed = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG and WebP images are allowed")
+
+    # 4. Upload to Azure
+    file_bytes = await file.read()
+    if len(file_bytes) > 5 * 1024 * 1024:  # 5MB limit
+        raise HTTPException(status_code=400, detail="Image must be under 5MB")
+
+    blob_url = await upload_image(file_bytes, file.filename, file.content_type)
+
+    # 5. Save to DB
+    result = await db.execute(
+        select(func.max(AccommodationImage.display_order)).where(
+            AccommodationImage.accommodation_id == accommodation_id
+        )
+    )
+    max_order = result.scalar() or 0
+
+    image = AccommodationImage(
+        accommodation_id=accommodation_id,
+        blob_url=blob_url,
+        display_order=max_order + 1
+    )
+    db.add(image)
+    await db.commit()
+    await db.refresh(image)
+
+    return {"id": image.id, "url": blob_url, "order": image.display_order}
+
+
+@router.delete("/{accommodation_id}/images/{image_id}")
+async def delete_accommodation_image(
+    accommodation_id: int,
+    image_id: int,
+    current_user: User = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
+    landlord = result.scalar_one_or_none()
+    if not landlord:
+        raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    result = await db.execute(
+        select(AccommodationImage).where(
+            AccommodationImage.id == image_id,
+            AccommodationImage.accommodation_id == accommodation_id
+        )
+    )
+    image = result.scalar_one_or_none()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    await delete_image(image.blob_url)
+    await db.delete(image)
+    await db.commit()
+
+    return {"detail": "Image deleted"}
