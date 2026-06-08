@@ -169,6 +169,57 @@ async def search_accommodations(
         "page_size": page_size,
     }
 
+@router.get("/my")
+async def get_my_accommodations(
+    current_user: User = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Landlord).where(Landlord.user_id == current_user.id)
+    result = await db.execute(query)
+    landlord = result.scalar_one_or_none()
+
+    if not landlord:
+        raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    result = await db.execute(
+        select(Accommodation)
+        .where(Accommodation.landlord_id == landlord.id)
+        .order_by(Accommodation.created_at.desc())
+    )
+    accommodations = result.scalars().all()
+
+    if not accommodations:
+        return []
+
+    # Enrich with review stats
+    output = []
+    for acc in accommodations:
+        reviews_result = await db.execute(
+            select(Review).where(
+                Review.accommodation_id == acc.id,
+                Review.deleted_at == None
+            )
+        )
+        reviews = reviews_result.scalars().all()
+        total_reviews = len(reviews)
+        average_rating = round(
+            sum(r.rating for r in reviews) / total_reviews, 2
+        ) if total_reviews > 0 else None
+
+        output.append({
+            "id": acc.id,
+            "title": acc.title,
+            "address": acc.address,
+            "price_min": acc.price_min,
+            "price_max": acc.price_max,
+            "status": acc.status,
+            "created_at": acc.created_at,
+            "total_reviews": total_reviews,
+            "average_rating": average_rating,
+        })
+
+    return output
+
 @router.get("/{accommodation_id}/analytics")
 async def get_analytics(
     accommodation_id: int,

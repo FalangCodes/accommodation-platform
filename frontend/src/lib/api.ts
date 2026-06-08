@@ -73,6 +73,8 @@ export const accommodationsApi = {
   create: (data: any) => api.post("/api/v1/accommodations", data),
 
   analytics: (id: number) => api.get(`/api/v1/accommodations/${id}/analytics`),
+
+  myListings: () => api.get("/api/v1/accommodations/my"),
 };
 
 // ── REVIEWS ───────────────────────────────────────────────────────────────────
