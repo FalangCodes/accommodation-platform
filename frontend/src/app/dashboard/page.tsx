@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ImagePlus } from "lucide-react";
-const [managingImages, setManagingImages] = useState<Listing | null>(null);
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,6 +102,7 @@ function CreateListingModal({
 }) {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [newListingId, setNewListingId] = useState<number | null>(null); // ← add this
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -120,6 +121,7 @@ function CreateListingModal({
     onClose();
     setTimeout(() => {
       setStep(1);
+      setNewListingId(null);
       setForm({ title: "", description: "", address: "", latitude: "", longitude: "", price_min: "", price_max: "" });
     }, 300);
   };
@@ -136,7 +138,7 @@ function CreateListingModal({
 
     setSubmitting(true);
     try {
-      await api.post("/api/v1/accommodations", {
+      const res = await api.post("/api/v1/accommodations", {
         title: form.title,
         description: form.description,
         address: form.address,
@@ -145,8 +147,9 @@ function CreateListingModal({
         price_min: Number(form.price_min),
         price_max: Number(form.price_max),
       });
+      setNewListingId(res.data.id); // ← capture ID
       onSuccess();
-      handleClose();
+      setStep(4); // ← proceed to photo upload step
     } catch (err: any) {
       toast.error(err?.response?.data?.detail ?? "Failed to create listing");
     } finally {
@@ -164,13 +167,9 @@ function CreateListingModal({
             {step === 1 ? "Listing details" : step === 2 ? "Location" : step === 3 ? "Pricing" : "Add photos"}
           </DialogTitle>
           <DialogDescription>
-            {step === 1 ? "Step 1 of 3 — Basic information"
-            : step === 2 ? "Step 2 of 3 — Where is the property?"
-            : step === 3 ? "Step 3 of 3 — Set your monthly price range"
-            : "Optional — Add photos to attract more students"}
-          </DialogDescription>
-          <DialogDescription>
-            Step {step} of 3 — {step === 1 ? "Basic information" : step === 2 ? "Where is the property?" : "Set your monthly price range"}
+            {step < 4
+              ? `Step ${step} of 3 — ${step === 1 ? "Basic information" : step === 2 ? "Where is the property?" : "Set your monthly price range"}`
+              : "Optional — Add photos to attract more students"}
           </DialogDescription>
         </DialogHeader>
 
@@ -290,45 +289,45 @@ function CreateListingModal({
             </>
           )}
 
+          {/* Step 4 — Photos */}
           {step === 4 && newListingId && (
             <ImageUploader
               accommodationId={newListingId}
-              onDone={() => {
-                onSuccess();
-                handleClose();
-              }}
+              onDone={handleClose}
               showDoneButton={true}
             />
           )}
 
-          {/* Navigation */}
-          <div className="flex gap-3 pt-2">
-            {step > 1 && (
-              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setStep(s => s - 1)} disabled={submitting}>
-                Back
-              </Button>
-            )}
-            {step < 3 ? (
-              <Button
-                className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
-                onClick={() => {
-                  if (step === 1 && (!form.title || !form.description)) { toast.error("Please fill in title and description"); return; }
-                  if (step === 2 && (!form.address || !form.latitude || !form.longitude)) { toast.error("Please fill in all location fields"); return; }
-                  setStep(s => s + 1);
-                }}
-              >
-                Continue
-              </Button>
-            ) : (
-              <Button
-                className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
-                onClick={handleSubmit}
-                disabled={submitting}
-              >
-                {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting...</> : "Submit listing"}
-              </Button>
-            )}
-          </div>
+          {/* Navigation — hide on step 4 */}
+          {step < 4 && (
+            <div className="flex gap-3 pt-2">
+              {step > 1 && (
+                <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setStep(s => s - 1)} disabled={submitting}>
+                  Back
+                </Button>
+              )}
+              {step < 3 ? (
+                <Button
+                  className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+                  onClick={() => {
+                    if (step === 1 && (!form.title || !form.description)) { toast.error("Please fill in title and description"); return; }
+                    if (step === 2 && (!form.address || !form.latitude || !form.longitude)) { toast.error("Please fill in all location fields"); return; }
+                    setStep(s => s + 1);
+                  }}
+                >
+                  Continue
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                >
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting...</> : "Submit listing"}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -448,6 +447,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [managingImages, setManagingImages] = useState<Listing | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/dashboard");
@@ -618,7 +618,7 @@ export default function DashboardPage() {
 
       {/* Manage images dialog */}
       <Dialog open={!!managingImages} onOpenChange={() => setManagingImages(null)}>
-        <DialogContent className="rounded-2xl max-w-lg">
+        <DialogContent className="rounded-2xl max-w-lg bg-white">
           <DialogHeader>
             <DialogTitle>Manage photos</DialogTitle>
             <DialogDescription>
