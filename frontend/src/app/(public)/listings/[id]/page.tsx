@@ -329,20 +329,21 @@ function StarRating({ rating, size = "md" }: { rating: number; size?: "sm" | "md
 
 function AspectBar({ label, score, icon: Icon }: { label: string; score: number; icon: any }) {
   const pct = Math.round(score * 100);
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-red-400";
+  
+  const frequency =
+    pct >= 70 ? { label: "Frequently mentioned", color: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" } :
+    pct >= 40 ? { label: "Sometimes mentioned",  color: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50"   } :
+                { label: "Rarely mentioned",      color: "bg-slate-300",   text: "text-slate-500",   bg: "bg-slate-100"  };
+
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-1.5 w-28 flex-shrink-0">
         <Icon className="w-3.5 h-3.5 text-slate-400" />
         <span className="text-xs text-slate-600 font-medium">{label}</span>
       </div>
-      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${color}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs font-semibold text-slate-700 w-8 text-right">{pct}%</span>
+      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${frequency.bg} ${frequency.text}`}>
+        {frequency.label}
+      </span>
     </div>
   );
 }

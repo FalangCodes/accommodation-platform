@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from app.db.base import get_db, AsyncSessionLocal
-from app.core.dependencies import get_current_student
+from app.core.dependencies import get_current_student, get_current_moderator
 from app.models.user import User
 from app.models.student import Student
 from app.models.accommodation import Accommodation
@@ -291,4 +291,37 @@ async def get_my_reviews(
             "created_at": r.created_at,
         }
         for r in reviews
+    ]
+
+@router.get("/reviews/flagged")
+async def get_flagged_reviews(
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    """Return all reviews flagged as spam by the NLP pipeline."""
+    result = await db.execute(
+        select(Review, ReviewNLPResult)
+        .join(ReviewNLPResult, ReviewNLPResult.review_id == Review.id)
+        .where(
+            ReviewNLPResult.spam_flag == True,
+            Review.deleted_at == None
+        )
+        .order_by(Review.created_at.desc())
+    )
+    rows = result.all()
+
+    return [
+        {
+            "id": review.id,
+            "accommodation_id": review.accommodation_id,
+            "student_id": review.student_id,
+            "rating": review.rating,
+            "body": review.body,
+            "created_at": review.created_at,
+            "nlp": {
+                "sentiment": nlp.sentiment,
+                "spam_flag": nlp.spam_flag,
+            }
+        }
+        for review, nlp in rows
     ]

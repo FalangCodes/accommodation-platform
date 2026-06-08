@@ -393,22 +393,24 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
               <h3 className="font-semibold text-slate-900 text-sm mb-4">Aspect scores</h3>
               <div className="space-y-3">
                 {Object.entries(analytics.top_aspects).map(([aspect, score]) => {
-                  const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
-                  const pct = Math.round(score * 100);
-                  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-red-400";
-                  return (
-                    <div key={aspect} className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 w-32 flex-shrink-0">
-                        <Icon className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-xs text-slate-600 font-medium">{ASPECT_LABELS[aspect] ?? aspect}</span>
-                      </div>
-                      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs font-semibold text-slate-700 w-8 text-right">{pct}%</span>
-                    </div>
-                  );
-                })}
+                    const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
+                    const pct = Math.round(score * 100);
+                    const frequency =
+                        pct >= 70 ? { label: "Frequently mentioned", text: "text-emerald-700", bg: "bg-emerald-50" } :
+                        pct >= 40 ? { label: "Sometimes mentioned",  text: "text-amber-700",   bg: "bg-amber-50"   } :
+                                    { label: "Rarely mentioned",      text: "text-slate-500",   bg: "bg-slate-100"  };
+                    return (
+                        <div key={aspect} className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-1.5 w-32 flex-shrink-0">
+                            <Icon className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-xs text-slate-600 font-medium">{ASPECT_LABELS[aspect] ?? aspect}</span>
+                        </div>
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${frequency.bg} ${frequency.text}`}>
+                            {frequency.label}
+                        </span>
+                        </div>
+                    );
+                    })}
               </div>
             </div>
           )}
