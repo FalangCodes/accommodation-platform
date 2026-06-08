@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import PageLayout from "@/components/page-layout";
+import ImageUploader from "@/components/image-uploader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +21,8 @@ import {
   BarChart2, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ImagePlus } from "lucide-react";
+const [managingImages, setManagingImages] = useState<Listing | null>(null);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,8 +161,14 @@ function CreateListingModal({
       <DialogContent className="rounded-2xl max-w-lg bg-white">
         <DialogHeader>
           <DialogTitle>
-            {step === 1 ? "Listing details" : step === 2 ? "Location" : "Pricing"}
+            {step === 1 ? "Listing details" : step === 2 ? "Location" : step === 3 ? "Pricing" : "Add photos"}
           </DialogTitle>
+          <DialogDescription>
+            {step === 1 ? "Step 1 of 3 — Basic information"
+            : step === 2 ? "Step 2 of 3 — Where is the property?"
+            : step === 3 ? "Step 3 of 3 — Set your monthly price range"
+            : "Optional — Add photos to attract more students"}
+          </DialogDescription>
           <DialogDescription>
             Step {step} of 3 — {step === 1 ? "Basic information" : step === 2 ? "Where is the property?" : "Set your monthly price range"}
           </DialogDescription>
@@ -170,7 +179,7 @@ function CreateListingModal({
           {[1, 2, 3].map((s) => (
             <div
               key={s}
-              className={`h-1 flex-1 rounded-full transition-all ${s <= step ? "bg-slate-900" : "bg-slate-200"}`}
+              className={`h-1 flex-1 rounded-full transition-all ${s <= Math.min(step, 3) ? "bg-slate-900" : "bg-slate-200"}`}
             />
           ))}
         </div>
@@ -279,6 +288,17 @@ function CreateListingModal({
                 </p>
               </div>
             </>
+          )}
+
+          {step === 4 && newListingId && (
+            <ImageUploader
+              accommodationId={newListingId}
+              onDone={() => {
+                onSuccess();
+                handleClose();
+              }}
+              showDoneButton={true}
+            />
           )}
 
           {/* Navigation */}
@@ -560,6 +580,16 @@ export default function DashboardPage() {
                           <Eye className="w-3.5 h-3.5" />
                           View
                         </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl text-xs gap-1.5"
+                          onClick={() => setManagingImages(listing)}
+                        >
+                          <ImagePlus className="w-3.5 h-3.5" />
+                          Photos
+                        </Button>
                         {listing.status === "approved" && (
                           <Button
                             size="sm"
@@ -585,6 +615,25 @@ export default function DashboardPage() {
         onClose={() => setCreateOpen(false)}
         onSuccess={handleCreateSuccess}
       />
+
+      {/* Manage images dialog */}
+      <Dialog open={!!managingImages} onOpenChange={() => setManagingImages(null)}>
+        <DialogContent className="rounded-2xl max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage photos</DialogTitle>
+            <DialogDescription>
+              {managingImages?.title}
+            </DialogDescription>
+          </DialogHeader>
+          {managingImages && (
+            <ImageUploader
+              accommodationId={managingImages.id}
+              showDoneButton={false}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
     </PageLayout>
   );
 }
