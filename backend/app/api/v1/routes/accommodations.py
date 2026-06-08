@@ -85,7 +85,10 @@ async def search_accommodations(
                 ST_Y(a.location::geometry) AS lat,
                 ST_X(a.location::geometry) AS lng,
                 COALESCE(AVG(r.rating), NULL)::float AS average_rating,
-                COUNT(r.id) AS review_count
+                COUNT(r.id) AS review_count,
+                (SELECT blob_url FROM accommodation_images
+                WHERE accommodation_id = a.id
+                ORDER BY display_order ASC LIMIT 1) AS cover_image
             FROM accommodations a
             JOIN universities u ON u.id = :university_id
             LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL
@@ -109,7 +112,10 @@ async def search_accommodations(
                 ST_Y(a.location::geometry) AS lat,
                 ST_X(a.location::geometry) AS lng,
                 COALESCE(AVG(r.rating), NULL)::float AS average_rating,
-                COUNT(r.id) AS review_count
+                COUNT(r.id) AS review_count,
+                (SELECT blob_url FROM accommodation_images
+                WHERE accommodation_id = a.id
+                ORDER BY display_order ASC LIMIT 1) AS cover_image
             FROM accommodations a
             LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL
             WHERE a.status = 'approved'

@@ -63,7 +63,7 @@ interface Accommodation {
   average_rating?: number;
   review_count?: number;
   sentiment_summary?: "positive" | "neutral" | "negative";
-  images?: { url: string }[];
+  cover_image?: string | null; 
   distance_km?: number;
   lat?: number;   // ← add
   lng?: number;   // ← add
@@ -176,10 +176,7 @@ function ListingCard({
     ? SENTIMENT_CONFIG[item.sentiment_summary]
     : null;
 
-  const imageUrl =
-    item.images && item.images.length > 0
-      ? item.images[0].url
-      : `/api/placeholder/${400 + index}`;
+  const imageUrl = item.cover_image ?? null;
 
   const handleClick = () => {
     if (!blurred) router.push(`/listings/${item.id}`);
@@ -194,9 +191,9 @@ function ListingCard({
     >
       {/* Image */}
       <div className="relative w-full h-52 overflow-hidden bg-slate-100">
-        {item.images && item.images.length > 0 ? (
+        {item.cover_image ? (
           <img
-            src={imageUrl}
+            src={imageUrl!}
             alt={item.title}
             className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
               blurred ? "blur-sm scale-105" : ""
