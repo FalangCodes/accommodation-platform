@@ -377,13 +377,13 @@ REVIEW_TEMPLATES = [
 ]
 
 
-async def call_nlp(review_body: str) -> dict:
+async def call_nlp(review_id: int, review_body: str) -> dict:
     """Call the NLP microservice directly."""
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "http://nlp:8001/analyze",
-                json={"text": review_body}
+                json={"review_id": review_id, "text": review_body}
             )
             if response.status_code == 200:
                 return response.json()
@@ -508,6 +508,8 @@ async def seed():
 
         await db.commit()
 
+               
+
         # ── 5. Create reviews + NLP ──
         review_count = 0
         for acc in accommodation_records:
@@ -572,7 +574,7 @@ async def seed():
 
                 # Call NLP service
                 print(f"  Calling NLP for review on {acc.title}...")
-                nlp_result = await call_nlp(body)
+                nlp_result = await call_nlp(review.id, review.body)
 
                 if nlp_result:
                     nlp_record = ReviewNLPResult(
@@ -594,6 +596,37 @@ async def seed():
         print(f"Students: {len([s for s in student_profiles if s])}")
         print(f"Accommodations: {len(accommodation_records)}")
         print(f"Reviews created: {review_count}")
+
+         # ── 6. Backfill missing NLP results ──
+        print("\nBackfilling missing NLP results...")
+        result = await db.execute(
+            select(Review).where(
+                Review.deleted_at == None,
+                Review.status == "pending_analysis"
+            )
+        )
+        pending_reviews = result.scalars().all()
+        print(f"Found {len(pending_reviews)} reviews without NLP results")
+
+        for review in pending_reviews:
+            print(f"  Processing review {review.id}...")
+            nlp_result = await call_nlp(review.id, review.body)
+            if nlp_result:
+                nlp_record = ReviewNLPResult(
+                    review_id=review.id,
+                    sentiment=nlp_result.get("sentiment", "neutral"),
+                    sentiment_score=nlp_result.get("sentiment_score", 0.5),
+                    aspects=nlp_result.get("aspects", {}),
+                    spam_flag=nlp_result.get("is_toxic", False),
+                )
+                db.add(nlp_record)
+                review.status = "analysed"
+                await db.commit()
+                print(f"  NLP complete for review {review.id} — sentiment: {nlp_result.get('sentiment')}")
+            else:
+                print(f"  NLP failed for review {review.id}")
+
+        print("Backfill complete.")
 
 
 if __name__ == "__main__":
