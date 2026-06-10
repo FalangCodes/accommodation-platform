@@ -597,7 +597,7 @@ async def seed():
         print(f"Accommodations: {len(accommodation_records)}")
         print(f"Reviews created: {review_count}")
 
-         # ── 6. Backfill missing NLP results ──
+        # ── 6. Backfill missing NLP results ──
         print("\nBackfilling missing NLP results...")
         result = await db.execute(
             select(Review).where(
@@ -609,6 +609,16 @@ async def seed():
         print(f"Found {len(pending_reviews)} reviews without NLP results")
 
         for review in pending_reviews:
+            # Check if NLP result already exists
+            existing_nlp = await db.execute(
+                select(ReviewNLPResult).where(ReviewNLPResult.review_id == review.id)
+            )
+            if existing_nlp.scalar_one_or_none():
+                review.status = "analysed"
+                await db.commit()
+                print(f"  Review {review.id} already has NLP — marking analysed")
+                continue
+
             print(f"  Processing review {review.id}...")
             nlp_result = await call_nlp(review.id, review.body)
             if nlp_result:
