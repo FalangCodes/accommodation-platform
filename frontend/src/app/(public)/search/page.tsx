@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/page-layout";
@@ -31,6 +31,7 @@ import {
   Lock,
   TrendingUp,
   Eye,
+  Loader2,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -89,7 +90,7 @@ interface MapItem {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 const BLUR_LAST_N = 3; // last N cards on page 1 are blurred for guests
 
 const SENTIMENT_CONFIG = {
@@ -460,8 +461,7 @@ interface Filters {
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
-
-export default function SearchPage() {
+function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isStudent, isLandlord } = useAuth();
@@ -495,15 +495,15 @@ export default function SearchPage() {
 
   // ── Accommodations ──
   const {
-    data: results,
-    isLoading,
-    isError,
-    isFetching,
-  } = useQuery<SearchResponse>({
-    queryKey: ["accommodations-search", appliedFilters, page],
-    queryFn: () => fetchAccommodations({ ...appliedFilters, page }),
-    keepPreviousData: true,
-  });
+  data: results,
+  isLoading,
+  isError,
+  isFetching,
+} = useQuery<SearchResponse>({
+  queryKey: ["accommodations-search", appliedFilters, page],
+  queryFn: () => fetchAccommodations({ ...appliedFilters, page }),
+  placeholderData: (previousData) => previousData,
+});
 
   // Redirect guests to login if they try to access page 2+
   useEffect(() => {
@@ -748,5 +748,17 @@ export default function SearchPage() {
       </div>
     </div>
     </PageLayout>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    }>
+      <SearchPageInner />
+    </Suspense>
   );
 }

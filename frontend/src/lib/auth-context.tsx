@@ -7,6 +7,7 @@ interface User {
   id: number;
   email: string;
   role: string;
+  is_active: boolean;
 }
 
 interface AuthContextType {

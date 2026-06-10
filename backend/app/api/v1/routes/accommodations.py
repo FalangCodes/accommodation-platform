@@ -62,7 +62,7 @@ async def search_accommodations(
     price_max: float = None,
     min_rating: float = None,
     page: int = 1,
-    page_size: int = 15,
+    page_size: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
     page = max(1, page)
