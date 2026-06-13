@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     MODERATOR_INVITE_KEY: str = "change-me-in-env"
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str = "listing-images"
+    ENCRYPTION_KEY: str = "U--coEBDscfXIuKRUdRLHoUCeV31NAkLxqI2FmIhLPc="
 
     class Config:
         env_file = ".env"

@@ -8,8 +8,12 @@ class Student(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     university_id = Column(Integer, ForeignKey("universities.id"), nullable=False)
-    
-    # Hashed for Tier 2 verification later
+
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    student_number = Column(String, nullable=True)
+
+    # Kept for future Tier 2 verification
     student_number_hash = Column(String, nullable=True)
     verification_tier = Column(Integer, default=1)
 
