@@ -382,18 +382,7 @@ function ReviewCard({ review, blurred }: { review: Review; blurred: boolean }) {
         {blurred ? "•".repeat(120) : review.body}
       </p>
 
-      {!blurred && review.nlp?.aspects && Object.keys(review.nlp.aspects).length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {Object.entries(review.nlp.aspects)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 4)
-            .map(([aspect]) => (
-              <span key={aspect} className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                {ASPECT_LABELS[aspect] ?? aspect}
-              </span>
-            ))}
-        </div>
-      )}
+      
 
       {!blurred && review.reply && (
         <div className="mt-3 pl-4 border-l-2 border-slate-200 bg-slate-50 rounded-r-xl p-3">
