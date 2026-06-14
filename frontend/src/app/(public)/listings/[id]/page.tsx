@@ -61,6 +61,7 @@ interface Review {
   body: string;
   created_at: string;
   student_id: number;
+  student_name?: string;
   nlp?: {
     sentiment: string;
     sentiment_score: number;
@@ -360,7 +361,7 @@ function ReviewCard({ review, blurred }: { review: Review; blurred: boolean }) {
           </div>
           <div>
             <p className="text-sm font-semibold text-slate-800">
-              {blurred ? "••••••••" : "Student"}
+              {blurred ? "••••••••" : (review.student_name ?? "Student")}
             </p>
             <p className="text-xs text-slate-400">
               {blurred ? "••••••" : new Date(review.created_at).toLocaleDateString("en-ZA", { month: "short", year: "numeric" })}

@@ -112,6 +112,7 @@ async def get_reviews_for_accommodation(
         return []
 
     review_ids = [r.id for r in reviews]
+    student_ids = [r.student_id for r in reviews]
 
     # Fetch NLP results
     nlp_result = await db.execute(
@@ -125,6 +126,19 @@ async def get_reviews_for_accommodation(
     )
     reply_map = {r.review_id: r for r in reply_result.scalars().all()}
 
+    # Fetch student names
+    from app.models.student import Student
+    student_result = await db.execute(
+        select(Student).where(Student.id.in_(student_ids))
+    )
+    student_name_map = {}
+    for student in student_result.scalars().all():
+        if student.first_name and student.last_name:
+            display = f"{student.first_name} {student.last_name[0].upper()}."
+        else:
+            display = "Student"
+        student_name_map[student.id] = display
+
     output = []
     for review in reviews:
         nlp = nlp_map.get(review.id)
@@ -132,6 +146,7 @@ async def get_reviews_for_accommodation(
         output.append({
             "id": review.id,
             "student_id": review.student_id,
+            "student_name": student_name_map.get(review.student_id, "Student"),
             "accommodation_id": review.accommodation_id,
             "rating": review.rating,
             "body": review.body,
