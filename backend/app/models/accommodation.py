@@ -14,25 +14,23 @@ class Accommodation(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     address = Column(String, nullable=False)
-
     location = Column(Geography(geometry_type='POINT', srid=4326), nullable=False)
 
     price_min = Column(Float, nullable=False)
     price_max = Column(Float, nullable=False)
 
-    # New fields
-    gender_policy = Column(String, nullable=True)   # 'male', 'female', 'mixed'
-    funding_type = Column(String, nullable=True)    # 'self_funded', 'bursary', 'both'
-    property_type = Column(String, nullable=True)   # 'bachelor', 'single_room', 'shared_room', 'flat', 'house'
+    gender_policy = Column(String, nullable=True)
+    funding_type = Column(String, nullable=True)
+    property_type = Column(String, nullable=True)
     website = Column(String, nullable=True)
-    amenities = Column(JSONB, nullable=True)        # ['wifi', 'parking', 'laundry', ...]
+    amenities = Column(JSONB, nullable=True)
+    ownership_doc_url = Column(String, nullable=True)
 
     status = Column(String, default="pending", index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relationships
     landlord = relationship("Landlord", back_populates="accommodations")
     reviews = relationship("Review", back_populates="accommodation")
 

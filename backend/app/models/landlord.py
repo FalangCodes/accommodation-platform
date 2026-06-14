@@ -12,8 +12,12 @@ class Landlord(Base):
     bio = Column(String, nullable=True)
     website = Column(String, nullable=True)
 
+    # Verification documents
+    id_copy_url = Column(String, nullable=True)
+    proof_of_address_url = Column(String, nullable=True)
+
     # Verification
-    id_number_encrypted = Column(String, nullable=True)  # encrypted at rest
+    id_number_encrypted = Column(String, nullable=True)
     id_number_verified = Column(Boolean, default=False)
     verification_status = Column(String, default="unverified")  # unverified, pending, verified, rejected
     rejection_reason = Column(String, nullable=True)
@@ -22,4 +26,3 @@ class Landlord(Base):
     # Relationships
     user = relationship("User", backref="landlord_profile")
     accommodations = relationship("Accommodation", back_populates="landlord")
-    documents = relationship("LandlordDocument", back_populates="landlord")
