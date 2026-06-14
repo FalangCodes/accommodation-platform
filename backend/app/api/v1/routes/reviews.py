@@ -141,12 +141,12 @@ async def get_flagged_reviews(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    """Return all reviews flagged as spam by the NLP pipeline."""
+    """Return all reviews currently in quarantine."""
     result = await db.execute(
         select(Review, ReviewNLPResult)
         .join(ReviewNLPResult, ReviewNLPResult.review_id == Review.id)
         .where(
-            ReviewNLPResult.spam_flag == True,
+            Review.status == "quarantined",
             Review.deleted_at == None
         )
         .order_by(Review.created_at.desc())
