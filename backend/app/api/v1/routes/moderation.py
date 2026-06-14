@@ -227,3 +227,33 @@ async def resolve_appeal(
     await db.commit()
 
     return {"detail": f"Appeal {body.decision}", "appeal_id": appeal_id}
+
+from app.models.review import Review, ReviewNLPResult
+
+@router.patch("/reviews/{review_id}/release")
+async def release_review(
+    review_id: int,
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Review).where(Review.id == review_id)
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    if review.status != "quarantined":
+        raise HTTPException(status_code=400, detail="Review is not quarantined")
+
+    review.status = "released"
+
+    log_entry = ModerationLog(
+        moderator_id=current_user.id,
+        action="released",
+        resource_type="review",
+        resource_id=review_id,
+    )
+    db.add(log_entry)
+    await db.commit()
+
+    return {"detail": "Review released and now publicly visible", "review_id": review_id}

@@ -117,7 +117,6 @@ async def get_my_reviews(
     if not reviews:
         return []
 
-    # Fetch accommodation titles
     accommodation_ids = [r.accommodation_id for r in reviews]
     acc_result = await db.execute(
         select(Accommodation).where(Accommodation.id.in_(accommodation_ids))
@@ -128,7 +127,7 @@ async def get_my_reviews(
         {
             "id": r.id,
             "accommodation_id": r.accommodation_id,
-            "accommodation_title": acc_map.get(r.accommodation_id, {}).title if acc_map.get(r.accommodation_id) else "Unknown listing",
+            "accommodation_title": acc_map[r.accommodation_id].title if r.accommodation_id in acc_map else "Unknown listing",
             "rating": r.rating,
             "body": r.body,
             "status": r.status,
@@ -179,7 +178,8 @@ async def get_reviews_for_accommodation(
     result = await db.execute(
         select(Review).where(
             Review.accommodation_id == accommodation_id,
-            Review.deleted_at == None
+            Review.deleted_at == None,
+            Review.status.in_(["analysed", "released"])
         ).order_by(Review.created_at.desc())
     )
     reviews = result.scalars().all()
@@ -190,19 +190,16 @@ async def get_reviews_for_accommodation(
     review_ids = [r.id for r in reviews]
     student_ids = [r.student_id for r in reviews]
 
-    # Fetch NLP results
     nlp_result = await db.execute(
         select(ReviewNLPResult).where(ReviewNLPResult.review_id.in_(review_ids))
     )
     nlp_map = {n.review_id: n for n in nlp_result.scalars().all()}
 
-    # Fetch replies
     reply_result = await db.execute(
         select(ReviewReply).where(ReviewReply.review_id.in_(review_ids))
     )
     reply_map = {r.review_id: r for r in reply_result.scalars().all()}
 
-    # Fetch student names
     from app.models.student import Student
     student_result = await db.execute(
         select(Student).where(Student.id.in_(student_ids))
@@ -232,7 +229,6 @@ async def get_reviews_for_accommodation(
                 "sentiment": nlp.sentiment,
                 "sentiment_score": nlp.sentiment_score,
                 "aspects": nlp.aspects,
-                "spam_flag": nlp.spam_flag,
             } if nlp else None,
             "reply": {
                 "id": reply.id,

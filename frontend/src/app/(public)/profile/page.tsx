@@ -231,12 +231,18 @@ export default function ProfilePage() {
                         </span>
                         <Badge
                           className={`text-xs border-0 rounded-full ${
-                            review.status === "analysed"
+                            review.status === "analysed" || review.status === "released"
                               ? "bg-emerald-50 text-emerald-700"
+                              : review.status === "quarantined"
+                              ? "bg-red-50 text-red-700"
                               : "bg-amber-50 text-amber-700"
                           }`}
                         >
-                          {review.status === "analysed" ? "✓ Analysed" : "⏳ Pending analysis"}
+                          {review.status === "analysed" || review.status === "released"
+                            ? "✓ Published"
+                            : review.status === "quarantined"
+                            ? "⚠️ Under review"
+                            : "⏳ Pending analysis"}
                         </Badge>
                       </div>
                     </div>

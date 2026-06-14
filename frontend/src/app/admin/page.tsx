@@ -117,13 +117,18 @@ function RejectModal({
   );
 }
 
-function FlaggedReviewsTab({ onRemove }: { onRemove: (review: FlaggedReview) => void }) {
-  const router = useRouter();
+  function FlaggedReviewsTab({
+    onRemove,
+    onRelease,
+  }: {
+    onRemove: (review: FlaggedReview) => void;
+    onRelease: (id: number) => void;
+  }) {  const router = useRouter();
 
-  const { data: flaggedReviews = [], isLoading } = useQuery({
-    queryKey: ["flagged-reviews"],
-    queryFn: fetchFlaggedReviews,
-  });
+    const { data: flaggedReviews = [], isLoading } = useQuery({
+      queryKey: ["flagged-reviews"],
+      queryFn: fetchFlaggedReviews,
+    });
 
   if (isLoading) {
     return (
@@ -193,6 +198,14 @@ function FlaggedReviewsTab({ onRemove }: { onRemove: (review: FlaggedReview) => 
               >
                 <Eye className="w-3.5 h-3.5" />
                 View listing
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => onRelease(review.id)}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Release
               </Button>
               <Button
                 size="sm"
@@ -330,6 +343,16 @@ export default function AdminPage() {
       toast.error("Failed to remove review");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleRelease = async (id: number) => {
+    try {
+      await api.patch(`/api/v1/moderation/reviews/${id}/release`);
+      queryClient.invalidateQueries({ queryKey: ["flagged-reviews"] });
+      toast.success("Review released and is now publicly visible.");
+    } catch {
+      toast.error("Failed to release review");
     }
   };
 
@@ -471,7 +494,10 @@ export default function AdminPage() {
 
         {/* ── Flagged reviews tab ── */}
         {activeTab === "reviews" && (
-          <FlaggedReviewsTab onRemove={(review) => setRemoveTarget(review)} />
+          <FlaggedReviewsTab
+            onRemove={(review) => setRemoveTarget(review)}
+            onRelease={(id) => handleRelease(id)}
+          />
         )}
       </div>
 

@@ -201,7 +201,7 @@ function WriteReviewModal({
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">Review submitted!</h3>
             <p className="text-sm text-slate-500">
-              Your review is being analysed by our AI. It will appear shortly.
+              Your review is being analysed by our AI. It will appear publicly once analysis is complete — usually within 30 seconds.
             </p>
           </div>
         ) : (
