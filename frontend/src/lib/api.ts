@@ -134,3 +134,32 @@ export const universitiesApi = {
   list: () => api.get("/api/v1/universities"),
 };
 
+// ── LANDLORDS ─────────────────────────────────────────────────────────────────
+export const landlordsApi = {
+  getMyProfile: () => api.get("/api/v1/landlords/me"),
+
+  uploadIdCopy: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post("/api/v1/landlords/me/documents/id-copy", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  uploadProofOfAddress: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post("/api/v1/landlords/me/documents/proof-of-address", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  submitVerification: () => api.post("/api/v1/landlords/me/verification/submit"),
+
+  getPendingVerifications: () => api.get("/api/v1/landlords/pending-verification"),
+
+  verifyLandlord: (id: number) => api.patch(`/api/v1/landlords/${id}/verify`),
+
+  rejectLandlord: (id: number, reason: string) =>
+    api.patch(`/api/v1/landlords/${id}/reject-verification`, { reason }),
+};
