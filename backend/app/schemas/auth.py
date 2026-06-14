@@ -6,7 +6,7 @@ class StudentCreate(BaseModel):
     password: str = Field(..., min_length=8, max_length=64)
     first_name: str = Field(..., min_length=2, max_length=50)
     last_name: str = Field(..., min_length=2, max_length=50)
-    student_number: Optional[str] = Field(None, max_length=20)
+    student_number: str = Field(..., min_length=5, max_length=20)
 
     @field_validator("email")
     @classmethod
@@ -30,7 +30,7 @@ class LandlordCreate(BaseModel):
     contact_phone: Optional[str] = Field(None, max_length=20)
     website: Optional[str] = Field(None, max_length=255)
     bio: Optional[str] = Field(None, max_length=500)
-    id_number: Optional[str] = Field(None, max_length=13)  # SA ID = 13 digits
+    id_number: str = Field(..., max_length=13)
 
     @field_validator("id_number")
     @classmethod
