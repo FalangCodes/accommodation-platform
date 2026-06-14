@@ -51,8 +51,7 @@ async function fetchPendingListings(): Promise<PendingListing[]> {
 }
 
 async function fetchFlaggedReviews(): Promise<FlaggedReview[]> {
-  // Fetch all reviews from all accommodations that are spam-flagged
-  const { data } = await api.get("/api/v1/moderation/reviews/flagged");
+  const { data } = await api.get("/api/v1/reviews/flagged");
   return data;
 }
 
