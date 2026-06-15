@@ -14,6 +14,7 @@ from app.core.dependencies import get_current_landlord
 from app.models.review import Review, ReviewReply, ReviewNLPResult
 from app.schemas.review import ReviewCreate, ReviewResponse, ReviewReplyCreate, ReviewReplyResponse
 from app.services.review_service import process_review_nlp
+from app.services.cache_service import cache_delete, cache_delete_pattern, key_listing, key_reviews, key_analytics, cache_get, cache_set, TTL_REVIEWS
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -82,6 +83,12 @@ async def submit_review(
     )
     db.add(new_review)
     await db.commit()
+    await cache_delete(
+    key_listing(review_in.accommodation_id),
+    key_reviews(review_in.accommodation_id),
+    key_analytics(review_in.accommodation_id),
+    )
+    await cache_delete_pattern("search:*")
     await db.refresh(new_review)
 
     # 6. TODO: Trigger NLP task via Celery (next step)
@@ -175,6 +182,10 @@ async def get_reviews_for_accommodation(
     accommodation_id: int,
     db: AsyncSession = Depends(get_db)
 ):
+    cache_key = key_reviews(accommodation_id)
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
     result = await db.execute(
         select(Review).where(
             Review.accommodation_id == accommodation_id,
@@ -239,6 +250,7 @@ async def get_reviews_for_accommodation(
             } if reply else None,
         })
 
+    await cache_set(cache_key, output, TTL_REVIEWS)
     return output
 
 
@@ -273,6 +285,11 @@ async def delete_review(
     review.cooldown_expires_at = now + timedelta(days=14)
 
     await db.commit()
+    await cache_delete(
+    key_listing(review.accommodation_id),
+    key_reviews(review.accommodation_id),
+    key_analytics(review.accommodation_id),
+)
 
 @router.post("/{review_id}/reply", response_model=ReviewReplyResponse, status_code=status.HTTP_201_CREATED)
 async def reply_to_review(

@@ -13,6 +13,11 @@ from app.models.university import University
 from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
 from app.services.storage_service import upload_image, delete_image
+from app.services.cache_service import (
+    cache_get, cache_set, cache_delete, cache_delete_pattern,
+    key_search, key_listing, key_reviews, key_analytics,
+    TTL_SEARCH, TTL_LISTING, TTL_REVIEWS, TTL_ANALYTICS
+)
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
 
@@ -71,6 +76,11 @@ async def search_accommodations(
     page_size: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
+    cache_key = key_search(university_id, radius_km, price_min, price_max, min_rating, page)
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+    
     page = max(1, page)
     page_size = min(max(1, page_size), 50)
     offset = (page - 1) * page_size
@@ -174,13 +184,15 @@ async def search_accommodations(
 
     result = await db.execute(main_sql, params)
     rows = result.mappings().all()
-
-    return {
+    result_data = {
         "items": [dict(row) for row in rows],
         "total": total,
         "page": page,
         "page_size": page_size,
     }
+
+    await cache_set(cache_key, result_data, TTL_SEARCH)
+    return result_data
 
 @router.get("/my")
 async def get_my_accommodations(
@@ -239,6 +251,11 @@ async def get_analytics(
     current_user: User = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
+    cache_key = key_analytics(accommodation_id)
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+    
     # 1. Verify landlord owns this listing
     query = select(Landlord).where(Landlord.user_id == current_user.id)
     result = await db.execute(query)
@@ -321,7 +338,7 @@ async def get_analytics(
     else:
         top_aspects = {}
 
-    return {
+    result_data = {
         "accommodation_id": accommodation_id,
         "total_views": total_views,
         "total_reviews": total_reviews,
@@ -330,9 +347,16 @@ async def get_analytics(
         "top_aspects": top_aspects
     }
 
+    await cache_set(cache_key, result_data, TTL_ANALYTICS)
+    return result_data
+
 
 @router.get("/{accommodation_id}")
 async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(get_db)):
+    cache_key = key_listing(accommodation_id)
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
     # 1. Base accommodation
     result = await db.execute(
         select(Accommodation).where(Accommodation.id == accommodation_id)
@@ -409,7 +433,7 @@ async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(ge
     dominant_sentiment = max(sentiment_distribution, key=sentiment_distribution.get) \
         if total_reviews > 0 else None
 
-    return {
+    result_data = {
         "id": accommodation.id,
         "landlord_id": accommodation.landlord_id,
         "landlord_name": landlord.display_name if landlord else None,
@@ -429,6 +453,9 @@ async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(ge
         "sentiment_distribution": sentiment_distribution,
         "top_aspects": top_aspects,
     }
+
+    await cache_set(cache_key, result_data, TTL_LISTING)
+    return result_data
 
 @router.post("/{accommodation_id}/images")
 async def upload_accommodation_image(

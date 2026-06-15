@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from app.models.moderation import ModerationQueue, ModerationLog, Appeal
 from app.core.dependencies import get_current_moderator
 from app.schemas.moderation import AppealOut, AppealResolveBody
+from app.services.cache_service import cache_delete_pattern, cache_delete, key_listing
 
 router = APIRouter(prefix="/moderation", tags=["Moderation"])
 
@@ -50,6 +51,8 @@ async def approve_listing(
     )
     db.add(log)
     await db.commit()
+    await cache_delete_pattern("search:*")
+    await cache_delete(key_listing(listing_id))
 
     return {"message": f"Listing {accommodation_id} approved successfully"}
 

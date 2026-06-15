@@ -737,7 +737,14 @@ export default function DashboardPage() {
                   Add your first property to start reaching students near campus.
                 </p>
                 <Button
-                  onClick={() => setCreateOpen(true)}
+                
+                  onClick={() => {
+                  if (profile && profile.verification_status !== "verified") {
+                    toast.error("Complete your verification before adding listings.");
+                    return;
+                  }
+                  setCreateOpen(true);
+                  }}
                   className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2"
                 >
                   <Plus className="w-4 h-4" />
