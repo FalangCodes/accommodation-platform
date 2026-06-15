@@ -31,12 +31,15 @@ class LandlordCreate(BaseModel):
     website: Optional[str] = Field(None, max_length=255)
     bio: Optional[str] = Field(None, max_length=500)
     id_number: str = Field(..., max_length=13)
+    address_line1: str = Field(..., min_length=5, max_length=200)
+    address_line2: Optional[str] = Field(None, max_length=200)
+    city: str = Field(..., min_length=2, max_length=100)
+    province: str = Field(..., min_length=2, max_length=100)
+    postal_code: str = Field(..., min_length=4, max_length=10)
 
     @field_validator("id_number")
     @classmethod
-    def validate_id_number(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
+    def validate_id_number(cls, v: str) -> str:
         digits = v.replace(" ", "")
         if not digits.isdigit() or len(digits) != 13:
             raise ValueError("South African ID number must be exactly 13 digits")

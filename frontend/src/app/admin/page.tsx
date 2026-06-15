@@ -43,6 +43,19 @@ interface FlaggedReview {
   };
 }
 
+interface PendingLandlord {
+  id: number;
+  display_name: string;
+  email: string;
+  contact_phone: string | null;
+  id_number: string;
+  id_number_verified: boolean;
+  id_copy_url: string | null;
+  proof_of_address_url: string | null;
+  verification_status: string;
+  address: string | null;
+}
+
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
 async function fetchPendingListings(): Promise<PendingListing[]> {
@@ -52,6 +65,11 @@ async function fetchPendingListings(): Promise<PendingListing[]> {
 
 async function fetchFlaggedReviews(): Promise<FlaggedReview[]> {
   const { data } = await api.get("/api/v1/reviews/flagged");
+  return data;
+}
+
+async function fetchPendingLandlords(): Promise<PendingLandlord[]> {
+  const { data } = await api.get("/api/v1/landlords/pending-verification");
   return data;
 }
 
@@ -223,6 +241,7 @@ function RejectModal({
   );
 }
 
+
 // ─── Remove Review Modal ──────────────────────────────────────────────────────
 
 function RemoveReviewModal({
@@ -280,6 +299,193 @@ function RemoveReviewModal({
   );
 }
 
+function LandlordVerificationTab({
+  onApprove,
+  onReject,
+}: {
+  onApprove: (id: number, name: string) => void;
+  onReject: (landlord: PendingLandlord) => void;
+}) {
+  const { data: landlords = [], isLoading } = useQuery({
+    queryKey: ["pending-landlords"],
+    queryFn: fetchPendingLandlords,
+  });
+
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (landlords.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-7 h-7 text-emerald-500" />
+        </div>
+        <h3 className="font-semibold text-slate-900 mb-1">No pending verifications</h3>
+        <p className="text-sm text-slate-500">All landlord verifications are up to date.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {landlords.map((landlord) => (
+        <div key={landlord.id} className="bg-white border border-slate-200 rounded-2xl p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-semibold text-slate-900">{landlord.display_name}</h3>
+                <Badge className="bg-amber-50 text-amber-700 border-amber-200 border rounded-full text-xs px-2 py-0.5">
+                  <Clock className="w-3 h-3 mr-1" />
+                  Pending
+                </Badge>
+              </div>
+              <p className="text-sm text-slate-500 mb-1">{landlord.email}</p>
+              {landlord.contact_phone && (
+                <p className="text-xs text-slate-400 mb-2">{landlord.contact_phone}</p>
+              )}
+
+              {landlord.address && (
+                <p className="text-xs text-slate-400 mb-2 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {landlord.address}
+                </p>
+              )}
+
+              {/* ID Number */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">ID Number:</span>
+                <code className="text-xs bg-slate-100 px-2 py-0.5 rounded font-mono text-slate-700">
+                  {landlord.id_number}
+                </code>
+                {landlord.id_number_verified && (
+                  <Badge className="bg-emerald-50 text-emerald-700 border-0 text-xs">Verified</Badge>
+                )}
+              </div>
+
+              {/* Document links */}
+              <div className="flex items-center gap-3">
+                {landlord.id_copy_url ? (
+                  <a
+                    href={landlord.id_copy_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    View ID copy
+                  </a>
+                ) : (
+                  <span className="text-xs text-red-500">⚠ ID copy not uploaded</span>
+                )}
+                {landlord.proof_of_address_url ? (
+                  <a
+                    href={landlord.proof_of_address_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    View proof of address
+                  </a>
+                ) : (
+                  <span className="text-xs text-red-500">⚠ Proof of address not uploaded</span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => onApprove(landlord.id, landlord.display_name)}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Verify
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-red-500 hover:bg-red-600 text-white"
+                onClick={() => onReject(landlord)}
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Reject
+              </Button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RejectLandlordModal({
+  open,
+  landlord,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  open: boolean;
+  landlord: PendingLandlord | null;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+  loading: boolean;
+}) {
+  const [reason, setReason] = useState("");
+
+  return (
+    <Dialog open={open} onOpenChange={() => { if (!loading) { onClose(); setReason(""); } }}>
+      <DialogContent className="rounded-2xl max-w-md bg-white">
+        <DialogHeader>
+          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-red-50 border border-red-100 mx-auto mb-2">
+            <XCircle className="w-5 h-5 text-red-500" />
+          </div>
+          <DialogTitle className="text-center">Reject verification</DialogTitle>
+          <DialogDescription className="text-center text-sm">
+            {landlord?.display_name}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+              Reason for rejection
+            </label>
+            <Textarea
+              className="rounded-xl resize-none h-28 text-sm"
+              placeholder="e.g. ID document is blurry, proof of address is expired..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { onClose(); setReason(""); }} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+              onClick={() => { if (!reason.trim()) { toast.error("Please provide a reason"); return; } onConfirm(reason); }}
+              disabled={loading || !reason.trim()}
+            >
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Rejecting...</> : "Reject verification"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -287,9 +493,10 @@ export default function AdminPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"listings" | "reviews">("listings");
+  const [activeTab, setActiveTab] = useState<"listings" | "reviews" | "landlords">("listings");
   const [rejectTarget, setRejectTarget] = useState<PendingListing | null>(null);
   const [removeTarget, setRemoveTarget] = useState<FlaggedReview | null>(null);
+  const [rejectLandlordTarget, setRejectLandlordTarget] = useState<PendingLandlord | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -356,6 +563,37 @@ export default function AdminPage() {
     }
   };
 
+  const { data: pendingLandlords = [] } = useQuery({
+    queryKey: ["pending-landlords"],
+    queryFn: fetchPendingLandlords,
+    enabled: !!user && !isStudent && !isLandlord,
+  });
+
+  const handleVerifyLandlord = async (id: number, name: string) => {
+    try {
+      await api.patch(`/api/v1/landlords/${id}/verify`);
+      queryClient.invalidateQueries({ queryKey: ["pending-landlords"] });
+      toast.success(`${name} has been verified.`);
+    } catch {
+      toast.error("Failed to verify landlord");
+    }
+  };
+
+  const handleRejectLandlord = async (reason: string) => {
+    if (!rejectLandlordTarget) return;
+    setActionLoading(true);
+    try {
+      await api.patch(`/api/v1/landlords/${rejectLandlordTarget.id}/reject-verification`, { reason });
+      queryClient.invalidateQueries({ queryKey: ["pending-landlords"] });
+      toast.success(`${rejectLandlordTarget.display_name}'s verification rejected.`);
+      setRejectLandlordTarget(null);
+    } catch {
+      toast.error("Failed to reject verification");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <PageLayout>
@@ -407,6 +645,21 @@ export default function AdminPage() {
           >
             <MessageSquare className="w-4 h-4" />
             Flagged reviews
+          </button>
+
+          <button
+            onClick={() => setActiveTab("landlords")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "landlords" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Landlord verification
+            {pendingLandlords.length > 0 && (
+              <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-semibold">
+                {pendingLandlords.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -499,7 +752,15 @@ export default function AdminPage() {
             onRelease={(id) => handleRelease(id)}
           />
         )}
+
+        {activeTab === "landlords" && (
+          <LandlordVerificationTab
+            onApprove={handleVerifyLandlord}
+            onReject={(landlord) => setRejectLandlordTarget(landlord)}
+          />
+        )}
       </div>
+      
 
       <RejectModal
         open={!!rejectTarget}
@@ -513,6 +774,14 @@ export default function AdminPage() {
         open={!!removeTarget}
         onClose={() => setRemoveTarget(null)}
         onConfirm={handleRemoveReview}
+        loading={actionLoading}
+      />
+
+      <RejectLandlordModal
+        open={!!rejectLandlordTarget}
+        landlord={rejectLandlordTarget}
+        onClose={() => setRejectLandlordTarget(null)}
+        onConfirm={handleRejectLandlord}
         loading={actionLoading}
       />
     </PageLayout>

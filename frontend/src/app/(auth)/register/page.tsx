@@ -14,6 +14,11 @@ import {
 import { toast } from "sonner";
 
 function RegisterForm() {
+  const [addressLine1, setAddressLine1] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
+  const [city, setCity] = useState("");
+  const [province, setProvince] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
@@ -64,6 +69,11 @@ function RegisterForm() {
           bio: bio || undefined,
           website: website || undefined,
           id_number: idNumber,
+          address_line1: addressLine1,
+          address_line2: addressLine2 || undefined,
+          city,
+          province,
+          postal_code: postalCode,
         });
       }
 
@@ -244,6 +254,72 @@ function RegisterForm() {
               <p className="text-xs text-gray-400">
                 {idNumber.length}/13 digits — used for identity verification only
               </p>
+            </div>
+
+            {/* Address fields */}
+            <div className="flex flex-col gap-1.5">
+              <Label>Street address</Label>
+              <Input
+                className={inputClass}
+                placeholder="e.g. 12 Warren Street"
+                value={addressLine1}
+                onChange={(e) => setAddressLine1(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Address line 2 <span className="text-gray-400">(optional)</span></Label>
+              <Input
+                className={inputClass}
+                placeholder="e.g. Unit 4"
+                value={addressLine2}
+                onChange={(e) => setAddressLine2(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>City</Label>
+                <Input
+                  className={inputClass}
+                  placeholder="e.g. Kimberley"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Postal code</Label>
+                <Input
+                  className={inputClass}
+                  placeholder="e.g. 8301"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Province</Label>
+              <select
+                className={`${inputClass} h-10`}
+                value={province}
+                onChange={(e) => setProvince(e.target.value)}
+                required
+              >
+                <option value="">Select province</option>
+                <option value="Eastern Cape">Eastern Cape</option>
+                <option value="Free State">Free State</option>
+                <option value="Gauteng">Gauteng</option>
+                <option value="KwaZulu-Natal">KwaZulu-Natal</option>
+                <option value="Limpopo">Limpopo</option>
+                <option value="Mpumalanga">Mpumalanga</option>
+                <option value="Northern Cape">Northern Cape</option>
+                <option value="North West">North West</option>
+                <option value="Western Cape">Western Cape</option>
+              </select>
             </div>
           </>
         )}

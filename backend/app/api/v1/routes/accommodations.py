@@ -23,13 +23,19 @@ async def create_accommodation(
     current_user: User = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
-    # Get landlord profile
     query = select(Landlord).where(Landlord.user_id == current_user.id)
     result = await db.execute(query)
     landlord = result.scalar_one_or_none()
 
     if not landlord:
         raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    # ── Block unverified landlords ──
+    if landlord.verification_status != "verified":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account must be verified before you can list properties. Please complete your verification in the dashboard."
+        )
 
     new_accommodation = Accommodation(
         landlord_id=landlord.id,

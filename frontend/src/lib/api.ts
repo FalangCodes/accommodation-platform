@@ -55,17 +55,22 @@ export const authApi = {
   first_name: string;
   last_name: string;
   student_number: string;
-}) => api.post("/api/v1/auth/register/student", data),
+  }) => api.post("/api/v1/auth/register/student", data),
 
-registerLandlord: (data: {
-  email: string;
-  password: string;
-  display_name: string;
-  contact_phone?: string;
-  bio?: string;
-  website?: string;
-  id_number: string;
-}) => api.post("/api/v1/auth/register/landlord", data),
+  registerLandlord: (data: {
+    email: string;
+    password: string;
+    display_name: string;
+    contact_phone?: string;
+    bio?: string;
+    website?: string;
+    id_number: string;
+    address_line1: string;
+    address_line2?: string;
+    city: string;
+    province: string;
+    postal_code: string;
+  }) => api.post("/api/v1/auth/register/landlord", data),
 
   login: (data: { email: string; password: string }) =>
     api.post("/api/v1/auth/login", data),

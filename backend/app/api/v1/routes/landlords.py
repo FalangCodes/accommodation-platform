@@ -165,6 +165,7 @@ async def get_pending_landlords(
             "id_copy_url": l.id_copy_url,
             "proof_of_address_url": l.proof_of_address_url,
             "verification_status": l.verification_status,
+            "address": f"{l.address_line1}, {l.city}, {l.province}, {l.postal_code}" if l.address_line1 else None,
         })
 
     return output

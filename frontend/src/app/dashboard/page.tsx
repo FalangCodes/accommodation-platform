@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -47,6 +47,17 @@ interface Analytics {
   top_aspects: Record<string, number>;
 }
 
+interface LandlordProfile {
+  id: number;
+  display_name: string;
+  verification_status: "unverified" | "pending" | "verified" | "rejected";
+  rejection_reason: string | null;
+  id_copy_uploaded: boolean;
+  proof_of_address_uploaded: boolean;
+  id_number_verified: boolean;
+  verified_at: string | null;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
@@ -78,6 +89,11 @@ const ASPECT_LABELS: Record<string, string> = {
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
+
+async function fetchMyProfile(): Promise<LandlordProfile> {
+  const { data } = await api.get("/api/v1/landlords/me");
+  return data;
+}
 
 async function fetchMyListings(): Promise<Listing[]> {
   const { data } = await api.get("/api/v1/accommodations/my");
@@ -439,6 +455,189 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
   );
 }
 
+function VerificationBanner({
+  profile,
+  onUploadSuccess,
+}: {
+  profile: LandlordProfile;
+  onUploadSuccess: () => void;
+}) {
+  const [uploadingId, setUploadingId] = useState(false);
+  const [uploadingPoa, setUploadingPoa] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const idRef = useRef<HTMLInputElement>(null);
+  const poaRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (
+    file: File,
+    type: "id-copy" | "proof-of-address",
+    setLoading: (v: boolean) => void
+  ) => {
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      await api.post(`/api/v1/landlords/me/documents/${type}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success(`${type === "id-copy" ? "ID copy" : "Proof of address"} uploaded successfully`);
+      onUploadSuccess();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitVerification = async () => {
+    setSubmitting(true);
+    try {
+      await api.post("/api/v1/landlords/me/verification/submit");
+      toast.success("Verification submitted! An admin will review your documents shortly.");
+      onUploadSuccess();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Submission failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (profile.verification_status === "verified") return null;
+
+  const bannerConfig = {
+    unverified: {
+      bg: "bg-amber-50 border-amber-200",
+      icon: <ShieldCheck className="w-5 h-5 text-amber-600" />,
+      title: "Complete your verification",
+      message: "Upload your ID copy and proof of address to get verified and start listing properties.",
+    },
+    pending: {
+      bg: "bg-blue-50 border-blue-200",
+      icon: <Clock className="w-5 h-5 text-blue-600" />,
+      title: "Verification under review",
+      message: "Your documents have been submitted. An admin will review them shortly.",
+    },
+    rejected: {
+      bg: "bg-red-50 border-red-200",
+      icon: <XCircle className="w-5 h-5 text-red-600" />,
+      title: "Verification rejected",
+      message: profile.rejection_reason ?? "Your verification was rejected. Please resubmit your documents.",
+    },
+  };
+
+  const config = bannerConfig[profile.verification_status];
+
+  return (
+    <div className={`border rounded-2xl p-5 mb-6 ${config.bg}`}>
+      <div className="flex items-start gap-3 mb-4">
+        {config.icon}
+        <div>
+          <h3 className="font-semibold text-slate-900 text-sm">{config.title}</h3>
+          <p className="text-sm text-slate-600 mt-0.5">{config.message}</p>
+        </div>
+      </div>
+
+      {(profile.verification_status === "unverified" || profile.verification_status === "rejected") && (
+        <div className="space-y-3">
+          {/* Document uploads */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* ID Copy */}
+            <div
+              onClick={() => !uploadingId && idRef.current?.click()}
+              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                profile.id_copy_uploaded
+                  ? "bg-emerald-50 border-emerald-200"
+                  : "bg-white border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              <input
+                ref={idRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUpload(file, "id-copy", setUploadingId);
+                }}
+              />
+              {uploadingId ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400 flex-shrink-0" />
+              ) : profile.id_copy_uploaded ? (
+                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              ) : (
+                <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              )}
+              <div>
+                <p className="text-xs font-semibold text-slate-700">ID Copy</p>
+                <p className="text-xs text-slate-400">
+                  {profile.id_copy_uploaded ? "Uploaded ✓" : "Click to upload"}
+                </p>
+              </div>
+            </div>
+
+            {/* Proof of Address */}
+            <div
+              onClick={() => !uploadingPoa && poaRef.current?.click()}
+              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                profile.proof_of_address_uploaded
+                  ? "bg-emerald-50 border-emerald-200"
+                  : "bg-white border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              <input
+                ref={poaRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUpload(file, "proof-of-address", setUploadingPoa);
+                }}
+              />
+              {uploadingPoa ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400 flex-shrink-0" />
+              ) : profile.proof_of_address_uploaded ? (
+                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              ) : (
+                <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              )}
+              <div>
+                <p className="text-xs font-semibold text-slate-700">Proof of Address</p>
+                <p className="text-xs text-slate-400">
+                  {profile.proof_of_address_uploaded ? "Uploaded ✓" : "Click to upload"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Submit button */}
+          <Button
+            className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+            onClick={handleSubmitVerification}
+            disabled={
+              submitting ||
+              !profile.id_copy_uploaded ||
+              !profile.proof_of_address_uploaded
+            }
+          >
+            {submitting ? (
+              <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting...</>
+            ) : (
+              "Submit for verification"
+            )}
+          </Button>
+
+          {(!profile.id_copy_uploaded || !profile.proof_of_address_uploaded) && (
+            <p className="text-xs text-slate-400 text-center">
+              Upload both documents to submit for verification
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -465,6 +664,12 @@ export default function DashboardPage() {
     toast.success("Listing submitted for review! It will go live once approved by a moderator.");
   };
 
+  const { data: profile, refetch: refetchProfile } = useQuery({
+  queryKey: ["landlord-profile"],
+  queryFn: fetchMyProfile,
+  enabled: !!user && isLandlord,
+});
+
   if (loading) {
     return (
       <PageLayout>
@@ -485,6 +690,13 @@ export default function DashboardPage() {
           <AnalyticsPanel listing={selectedListing} onBack={() => setSelectedListing(null)} />
         ) : (
           <>
+            {/* Verification banner */}
+            {profile && profile.verification_status !== "verified" && (
+              <VerificationBanner
+                profile={profile}
+                onUploadSuccess={refetchProfile}
+              />
+            )}
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
               <div>
@@ -494,7 +706,13 @@ export default function DashboardPage() {
                 </p>
               </div>
               <Button
-                onClick={() => setCreateOpen(true)}
+                onClick={() => {
+                  if (profile && profile.verification_status !== "verified") {
+                    toast.error("Complete your verification before adding listings.");
+                    return;
+                  }
+                  setCreateOpen(true);
+                }}
                 className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2"
               >
                 <Plus className="w-4 h-4" />

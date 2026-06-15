@@ -148,6 +148,11 @@ async def register_landlord(landlord_in: LandlordCreate, db: AsyncSession = Depe
         website=landlord_in.website,
         id_number_encrypted=encrypt_value(landlord_in.id_number) if landlord_in.id_number else None,
         verification_status="unverified",
+        address_line1=landlord_in.address_line1,
+        address_line2=landlord_in.address_line2,
+        city=landlord_in.city,
+        province=landlord_in.province,
+        postal_code=landlord_in.postal_code,
     )
     db.add(new_landlord)
     await db.commit()

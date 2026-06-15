@@ -11,6 +11,11 @@ class Landlord(Base):
     contact_phone = Column(String, nullable=True)
     bio = Column(String, nullable=True)
     website = Column(String, nullable=True)
+    address_line1 = Column(String, nullable=True)
+    address_line2 = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    province = Column(String, nullable=True)
+    postal_code = Column(String, nullable=True)
 
     # Verification documents
     id_copy_url = Column(String, nullable=True)
