@@ -127,10 +127,15 @@ function CreateListingModal({
     longitude: "",
     price_min: "",
     price_max: "",
+    property_type: "",
+    gender_policy: "",
+    funding_type: "",
+    website: "",
+    amenities: [] as string[],
   });
 
-  const update = (field: string, value: string) =>
-    setForm((f) => ({ ...f, [field]: value }));
+  const update = (field: string, value: string | string[]) =>
+  setForm((f) => ({ ...f, [field]: value }));
 
   const handleClose = () => {
     if (submitting) return;
@@ -138,7 +143,14 @@ function CreateListingModal({
     setTimeout(() => {
       setStep(1);
       setNewListingId(null);
-      setForm({ title: "", description: "", address: "", latitude: "", longitude: "", price_min: "", price_max: "" });
+      setForm({
+        title: "", description: "", address: "",
+        latitude: "", longitude: "",
+        price_min: "", price_max: "",
+        property_type: "", gender_policy: "",
+        funding_type: "", website: "",
+        amenities: [],
+      });
     }, 300);
   };
 
@@ -162,6 +174,11 @@ function CreateListingModal({
         longitude: Number(form.longitude),
         price_min: Number(form.price_min),
         price_max: Number(form.price_max),
+        gender_policy: form.gender_policy || undefined,
+        funding_type: form.funding_type || undefined,
+        property_type: form.property_type || undefined,
+        website: form.website || undefined,
+        amenities: form.amenities.length > 0 ? form.amenities : undefined,
       });
       setNewListingId(res.data.id); // ← capture ID
       onSuccess();
@@ -222,6 +239,23 @@ function CreateListingModal({
                   onChange={(e) => update("description", e.target.value)}
                 />
                 <p className="text-xs text-slate-400 mt-1">{form.description.length} / 2000</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Property type</label>
+                <select
+                  className={inputClass}
+                  value={form.property_type}
+                  onChange={(e) => update("property_type", e.target.value)}
+                >
+                  <option value="">Select type</option>
+                  <option value="bachelor">Bachelor</option>
+                  <option value="single_room">Single Room</option>
+                  <option value="shared_room">Shared Room</option>
+                  <option value="shared_room">Mixed</option>
+                  <option value="flat">Flat</option>
+                  <option value="house">House</option>
+                </select>
               </div>
             </>
           )}
@@ -295,6 +329,88 @@ function CreateListingModal({
                     type="number"
                     min="0"
                   />
+                </div>
+              </div>
+              {/* Gender policy */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Accommodation for</label>
+                  <select
+                    className={inputClass}
+                    value={form.gender_policy}
+                    onChange={(e) => update("gender_policy", e.target.value)}
+                  >
+                    <option value="">Select</option>
+                    <option value="male">Male only</option>
+                    <option value="female">Female only</option>
+                    <option value="mixed">Mixed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Funding type</label>
+                  <select
+                    className={inputClass}
+                    value={form.funding_type}
+                    onChange={(e) => update("funding_type", e.target.value)}
+                  >
+                    <option value="">Select</option>
+                    <option value="self_funded">Self funded</option>
+                    <option value="bursary">Bursary / NSFAS</option>
+                    <option value="both">Both</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Website */}
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                  Website <span className="text-slate-400">(optional)</span>
+                </label>
+                <input
+                  className={inputClass}
+                  placeholder="e.g. https://myresidence.co.za"
+                  value={form.website}
+                  onChange={(e) => update("website", e.target.value)}
+                  type="url"
+                />
+              </div>
+
+              {/* Amenities */}
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-2 block">Amenities</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "wifi", label: "WiFi" },
+                    { value: "parking", label: "Parking" },
+                    { value: "laundry", label: "Laundry" },
+                    { value: "furnished", label: "Furnished" },
+                    { value: "security", label: "Security" },
+                    { value: "generator", label: "Generator" },
+                    { value: "solar", label: "Solar" },
+                    { value: "cctv", label: "CCTV" },
+                    { value: "study_room", label: "Study room" },
+                    { value: "kitchen", label: "Kitchen" },
+                    { value: "garden", label: "Garden" },
+                  ].map((amenity) => (
+                    <button
+                      key={amenity.value}
+                      type="button"
+                      onClick={() => {
+                        const current = form.amenities ?? [];
+                        const updated = current.includes(amenity.value)
+                          ? current.filter((a) => a !== amenity.value)
+                          : [...current, amenity.value];
+                        update("amenities", updated as any);
+                      }}
+                      className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        (form.amenities ?? []).includes(amenity.value)
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                      }`}
+                    >
+                      {amenity.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">

@@ -43,15 +43,20 @@ async def create_accommodation(
         )
 
     new_accommodation = Accommodation(
-        landlord_id=landlord.id,
-        title=accommodation_in.title,
-        description=accommodation_in.description,
-        address=accommodation_in.address,
-        location=f"POINT({accommodation_in.longitude} {accommodation_in.latitude})",
-        price_min=accommodation_in.price_min,
-        price_max=accommodation_in.price_max,
-        status="pending"
-    )
+    landlord_id=landlord.id,
+    title=accommodation_in.title,
+    description=accommodation_in.description,
+    address=accommodation_in.address,
+    location=f"POINT({accommodation_in.longitude} {accommodation_in.latitude})",
+    price_min=accommodation_in.price_min,
+    price_max=accommodation_in.price_max,
+    gender_policy=accommodation_in.gender_policy,
+    funding_type=accommodation_in.funding_type,
+    property_type=accommodation_in.property_type,
+    website=accommodation_in.website,
+    amenities=accommodation_in.amenities,
+    status="pending"
+)
     db.add(new_accommodation)
     await db.commit()
     await db.refresh(new_accommodation)
@@ -446,6 +451,11 @@ async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(ge
         "created_at": accommodation.created_at,
         "lat": coords["lat"] if coords else None,
         "lng": coords["lng"] if coords else None,
+        "gender_policy": accommodation.gender_policy,
+        "funding_type": accommodation.funding_type,
+        "property_type": accommodation.property_type,
+        "website": accommodation.website,
+        "amenities": accommodation.amenities,
         "images": [{"id": img.id, "url": img.blob_url, "order": img.display_order} for img in images],
         "total_reviews": total_reviews,
         "average_rating": average_rating,

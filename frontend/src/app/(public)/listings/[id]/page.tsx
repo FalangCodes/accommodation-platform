@@ -53,6 +53,11 @@ interface ListingDetail {
   dominant_sentiment: "positive" | "neutral" | "negative" | null;
   sentiment_distribution: { positive: number; neutral: number; negative: number };
   top_aspects: Record<string, number>;
+  gender_policy?: string | null;
+  funding_type?: string | null;
+  property_type?: string | null;
+  website?: string | null;
+  amenities?: string[] | null;
 }
 
 interface Review {
@@ -574,6 +579,70 @@ export default function ListingDetailPage() {
                       <div className="bg-white border border-slate-200 rounded-2xl p-6">
                         <h2 className="font-semibold text-slate-900 mb-3">About this place</h2>
                         <p className="text-slate-600 leading-relaxed whitespace-pre-line">{listing!.description}</p>
+                      </div>
+                      {/* Property details card */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-6">
+                        <h2 className="font-semibold text-slate-900 mb-4">Property details</h2>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          {listing!.property_type && (
+                            <div>
+                              <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Type</p>
+                              <p className="text-sm font-medium text-slate-700 capitalize">
+                                {listing!.property_type.replace("_", " ")}
+                              </p>
+                            </div>
+                          )}
+                          {listing!.gender_policy && (
+                            <div>
+                              <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Suitable for</p>
+                              <p className="text-sm font-medium text-slate-700 capitalize">
+                                {listing!.gender_policy === "mixed" ? "Everyone" : `${listing!.gender_policy} only`}
+                              </p>
+                            </div>
+                          )}
+                          {listing!.funding_type && (
+                            <div>
+                              <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Funding</p>
+                              <p className="text-sm font-medium text-slate-700">
+                                {listing!.funding_type === "self_funded"
+                                  ? "Self funded"
+                                  : listing!.funding_type === "bursary"
+                                  ? "Bursary / NSFAS"
+                                  : "Self funded & Bursary"}
+                              </p>
+                            </div>
+                          )}
+                          {listing!.website && (
+                            <div>
+                              <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Website</p>
+                              <a
+                                href={listing!.website}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium text-blue-600 hover:underline"
+                              >
+                                Visit website
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Amenities */}
+                        {listing!.amenities && listing!.amenities.length > 0 && (
+                          <div>
+                            <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Amenities</p>
+                            <div className="flex flex-wrap gap-2">
+                              {listing!.amenities.map((amenity) => (
+                                <span
+                                  key={amenity}
+                                  className="text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium capitalize"
+                                >
+                                  {amenity.replace("_", " ")}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="bg-white border border-slate-200 rounded-2xl p-6">
                         <h2 className="font-semibold text-slate-900 mb-4">Listed by</h2>
