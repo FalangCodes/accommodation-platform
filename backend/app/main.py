@@ -19,14 +19,15 @@ async def scheduled_flush():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start scheduler
-    #    scheduled_flush,
-        #"cron",
-        #hour=0,       # midnight
-        #minute=0,
-        #id="flush_views"
-    #)
+    scheduler.add_job(
+        scheduled_flush,
+        "cron",
+        hour=0,       # midnight
+        minute=0,
+        id="flush_views"
+    )
     # ── For testing: flush every 1 minute ──
-    scheduler.add_job(scheduled_flush, "interval", minutes=1, id="flush_views")
+    # scheduler.add_job(scheduled_flush, "interval", minutes=1, id="flush_views")
     scheduler.start()
     print("Scheduler started")
     yield
