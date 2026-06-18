@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
 import hashlib
-
 from app.db.base import get_db
 from app.core.dependencies import get_current_landlord
 from app.models.user import User
@@ -61,6 +60,30 @@ async def create_accommodation(
     db.add(new_accommodation)
     await db.commit()
     await db.refresh(new_accommodation)
+
+    # Auto-link to nearest university
+    nearest_uni = await db.execute(
+        text("""
+            SELECT id FROM universities
+            ORDER BY ST_Distance(
+                campus_location,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)
+            ) ASC
+            LIMIT 1
+        """),
+        {"lng": accommodation_in.longitude, "lat": accommodation_in.latitude}
+    )
+    uni_row = nearest_uni.fetchone()
+    if uni_row:
+        await db.execute(
+            text("""
+                INSERT INTO accommodation_universities (accommodation_id, university_id)
+                VALUES (:acc_id, :uni_id)
+                ON CONFLICT DO NOTHING
+            """),
+            {"acc_id": new_accommodation.id, "uni_id": uni_row[0]}
+        )
+        await db.commit()
 
     return new_accommodation
 

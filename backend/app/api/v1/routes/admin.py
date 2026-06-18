@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.student import Student
 from app.models.landlord import Landlord
 from app.models.university import University
-from app.models.accommodation import Accommodation, AccommodationView
+from app.models.accommodation import Accommodation, AccommodationView, accommodation_universities
 from app.models.review import Review, ReviewNLPResult
 from app.models.moderation import ModerationLog
 from app.core.security import get_password_hash
@@ -180,13 +180,13 @@ async def get_universities_tree(
     for uni in universities:
         # Get accommodations for this university
         acc_result = await db.execute(
-            select(Accommodation).where(
-                Accommodation.id.in_(
-                    select(text("accommodation_id")).select_from(
-                        text("accommodation_universities")
-                    ).where(text(f"university_id = {uni.id}"))
-                )
-            ).order_by(Accommodation.created_at.desc())
+            select(Accommodation)
+            .join(
+                accommodation_universities,
+                accommodation_universities.c.accommodation_id == Accommodation.id
+            )
+            .where(accommodation_universities.c.university_id == uni.id)
+            .order_by(Accommodation.created_at.desc())
         )
         accommodations = acc_result.scalars().all()
 
