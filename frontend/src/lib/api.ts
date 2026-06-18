@@ -169,3 +169,18 @@ export const landlordsApi = {
   rejectLandlord: (id: number, reason: string) =>
     api.patch(`/api/v1/landlords/${id}/reject-verification`, { reason }),
 };
+
+// ── ADMIN ─────────────────────────────────────────────────────────────────────
+export const adminApi = {
+  getStats: () => api.get("/api/v1/admin/stats"),
+  getUniversitiesTree: () => api.get("/api/v1/admin/universities/tree"),
+  addUniversity: (data: { name: string; domain: string; province: string; lat: number; lng: number }) =>
+    api.post("/api/v1/admin/universities", data),
+  getStudents: () => api.get("/api/v1/admin/users/students"),
+  getLandlords: () => api.get("/api/v1/admin/users/landlords"),
+  getModerators: () => api.get("/api/v1/admin/users/moderators"),
+  createModerator: (data: { email: string; password: string }) =>
+    api.post("/api/v1/admin/moderators", data),
+  deactivateUser: (id: number) => api.patch(`/api/v1/admin/users/${id}/deactivate`),
+  activateUser: (id: number) => api.patch(`/api/v1/admin/users/${id}/activate`),
+};

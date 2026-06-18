@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.api.v1.routes import auth, accommodations, reviews, moderation
 from app.api.v1.routes.universities import router as universities_router
 from app.api.v1.routes.landlords import router as landlords_router
+from app.api.v1.routes.admin import router as admin_router
 from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
 import app.db.models
@@ -58,6 +59,8 @@ app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(moderation.router, prefix="/api/v1")
 app.include_router(universities_router, prefix="/api/v1")
 app.include_router(landlords_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
+
 
 @app.get("/health")
 async def health_check():
