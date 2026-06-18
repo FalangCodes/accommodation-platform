@@ -18,6 +18,7 @@ interface AuthContextType {
   isStudent: boolean;
   isLandlord: boolean;
   isModerator: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -65,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isStudent: user?.role === "student",
       isLandlord: user?.role === "landlord",
       isModerator: user?.role === "moderator" || user?.role === "admin",
+      isAdmin: user?.role === "admin",
     }}>
       {children}
     </AuthContext.Provider>

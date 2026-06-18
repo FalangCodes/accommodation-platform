@@ -16,7 +16,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Navbar() {
-  const { user, logout, isLandlord, isModerator } = useAuth();
+  const { user, logout, isLandlord, isModerator, isAdmin } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const router = useRouter();
 
@@ -57,13 +57,16 @@ export default function Navbar() {
             )}
             {isModerator && (
               <Link
-                href="/admin"
+                href="/moderation"
                 className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
               >
                 Moderation
               </Link>
             )}
           </div>
+          {isAdmin && (
+            <Link href="/admin">Admin</Link>
+          )}
 
           {/* ── Right side actions (desktop) ── */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
@@ -172,12 +175,16 @@ export default function Navbar() {
             )}
             {isModerator && (
               <Link
-                href="/admin"
+                href="/moderation"
                 className="text-sm font-medium text-gray-600"
                 onClick={() => setMobileOpen(false)}
               >
                 Moderation
               </Link>
+            )}
+
+            {isAdmin && (
+              <Link href="/admin">Admin</Link>
             )}
             <div className="pt-2 border-t border-gray-100">
               {user ? (
