@@ -79,3 +79,66 @@ async def cache_delete_pattern(pattern: str) -> None:
             await redis.delete(*keys)
     except Exception as e:
         print(f"Cache DELETE pattern failed for {pattern}: {e}")
+
+# ─── View counter ─────────────────────────────────────────────────────────────
+
+def key_views(accommodation_id: int) -> str:
+    return f"views:{accommodation_id}"
+
+async def increment_view(accommodation_id: int) -> None:
+    """Increment Redis view counter for an accommodation."""
+    try:
+        redis = await get_redis()
+        await redis.incr(key_views(accommodation_id))
+    except Exception as e:
+        print(f"View increment failed for {accommodation_id}: {e}")
+
+async def get_today_views(accommodation_id: int) -> int:
+    """Get today's buffered view count from Redis."""
+    try:
+        redis = await get_redis()
+        val = await redis.get(key_views(accommodation_id))
+        return int(val) if val else 0
+    except Exception as e:
+        print(f"Get views failed for {accommodation_id}: {e}")
+        return 0
+
+async def flush_views_to_db(db) -> None:
+    """Flush all Redis view counters to the accommodation_views table."""
+    try:
+        redis = await get_redis()
+        keys = await redis.keys("views:*")
+        if not keys:
+            print("No view counters to flush")
+            return
+
+        from app.models.accommodation import AccommodationView
+        from datetime import datetime, timezone
+        import hashlib
+
+        for key in keys:
+            accommodation_id = int(key.split(":")[1])
+            count = await redis.get(key)
+            if not count or int(count) == 0:
+                continue
+
+            count = int(count)
+
+            # Insert one row per view count
+            for _ in range(count):
+                view = AccommodationView(
+                    accommodation_id=accommodation_id,
+                    viewer_ip_hash=hashlib.md5(b"buffered").hexdigest(),
+                    viewed_at=datetime.now(timezone.utc)
+                )
+                db.add(view)
+
+            # Reset counter
+            await redis.delete(key)
+            print(f"Flushed {count} views for accommodation {accommodation_id}")
+
+        await db.commit()
+        print("View flush complete")
+
+    except Exception as e:
+        print(f"View flush failed: {e}")

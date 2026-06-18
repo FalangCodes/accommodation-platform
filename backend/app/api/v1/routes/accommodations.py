@@ -1,8 +1,9 @@
 from sqlalchemy import text, func
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
+import hashlib
 
 from app.db.base import get_db
 from app.core.dependencies import get_current_landlord
@@ -14,8 +15,8 @@ from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
 from app.services.storage_service import upload_image, delete_image
 from app.services.cache_service import (
-    cache_get, cache_set, cache_delete, cache_delete_pattern,
-    key_search, key_listing, key_reviews, key_analytics,
+    cache_get, cache_set, cache_delete, cache_delete_pattern, get_today_views,
+    key_search, key_listing, key_reviews, key_analytics, increment_view,
     TTL_SEARCH, TTL_LISTING, TTL_REVIEWS, TTL_ANALYTICS
 )
 
@@ -284,10 +285,12 @@ async def get_analytics(
 
     # 2. Total views
     query = select(func.count(AccommodationView.id)).where(
-        AccommodationView.accommodation_id == accommodation_id
+    AccommodationView.accommodation_id == accommodation_id
     )
     result = await db.execute(query)
-    total_views = result.scalar() or 0
+    db_views = result.scalar() or 0
+    today_views = await get_today_views(accommodation_id)
+    total_views = db_views + today_views
 
     # 3. Reviews stats
     query = select(Review).where(
@@ -355,6 +358,22 @@ async def get_analytics(
     await cache_set(cache_key, result_data, TTL_ANALYTICS)
     return result_data
 
+@router.post("/{accommodation_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def record_view(
+    accommodation_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Record a listing view — increments Redis counter, flushed to DB at midnight."""
+    # Verify accommodation exists
+    result = await db.execute(
+        select(Accommodation).where(Accommodation.id == accommodation_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Accommodation not found")
+
+    # Increment Redis counter
+    await increment_view(accommodation_id)
 
 @router.get("/{accommodation_id}")
 async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(get_db)):

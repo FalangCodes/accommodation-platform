@@ -102,6 +102,7 @@ export const accommodationsApi = {
   },
   deleteImage: (accommodationId: number, imageId: number) =>
     api.delete(`/api/v1/accommodations/${accommodationId}/images/${imageId}`),
+  recordView: (id: number) => api.post(`/api/v1/accommodations/${id}/view`),
 };
 
 // ── REVIEWS ───────────────────────────────────────────────────────────────────

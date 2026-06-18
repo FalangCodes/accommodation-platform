@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/page-layout";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, accommodationsApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -473,6 +473,13 @@ export default function ListingDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["listing", id] });
     toast.success("Review submitted! AI analysis is running in the background.");
   };
+
+  // Fire view once on mount
+  useEffect(() => {
+  if (id) {
+    accommodationsApi.recordView(Number(id)).catch(() => {});
+  }
+  }, [id]);
 
   if (isError) {
     return (
