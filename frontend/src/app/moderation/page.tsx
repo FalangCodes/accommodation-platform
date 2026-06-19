@@ -28,6 +28,13 @@ interface PendingListing {
   price_min: number;
   price_max: number;
   created_at: string;
+  ownership_doc_url: string | null;
+  landlord: {
+    display_name: string;
+    contact_phone: string | null;
+    id_number: string | null;
+    verification_status: string;
+  } | null;
 }
 
 interface FlaggedReview {
@@ -706,6 +713,54 @@ export default function AdminPage() {
                               day: "numeric", month: "short", year: "numeric"
                             })}
                           </span>
+                        </div>
+
+                        {/* Landlord info */}
+                        {listing.landlord && (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Landlord</p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-800">{listing.landlord.display_name}</span>
+                              <Badge className={`text-xs border rounded-full capitalize ${
+                                listing.landlord.verification_status === "verified"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}>
+                                {listing.landlord.verification_status}
+                              </Badge>
+                            </div>
+                            {listing.landlord.id_number && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400">ID:</span>
+                                <code className="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded font-mono text-slate-700">
+                                  {listing.landlord.id_number}
+                                </code>
+                              </div>
+                            )}
+                            {listing.landlord.contact_phone && (
+                              <p className="text-xs text-slate-500">{listing.landlord.contact_phone}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Ownership document */}
+                        <div className="mt-3">
+                          {listing.ownership_doc_url ? (
+                            <a
+                              href={listing.ownership_doc_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              View ownership document
+                            </a>
+                          ) : (
+                            <span className="text-xs text-red-500 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              No ownership document
+                            </span>
+                          )}
                         </div>
                       </div>
 

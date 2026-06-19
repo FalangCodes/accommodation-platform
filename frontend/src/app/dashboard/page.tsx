@@ -1090,6 +1090,17 @@ export default function DashboardPage() {
                           <ImagePlus className="w-3.5 h-3.5" />
                           Photos
                         </Button>
+                        {!listing.ownership_doc_url && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50"
+                            onClick={() => setUploadingOwnershipFor(listing)}
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Add ownership doc
+                          </Button>
+                        )}
                         {listing.status === "approved" && (
                           <Button
                             size="sm"

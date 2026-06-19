@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.models.moderation import ModerationLog
+from app.models.landlord import Landlord
 from datetime import datetime, timezone
 from app.models.moderation import ModerationQueue, ModerationLog, Appeal
 from app.core.dependencies import get_current_moderator
@@ -132,22 +133,45 @@ async def get_pending_listings(
     result = await db.execute(
         select(Accommodation).where(
             Accommodation.status == "pending",
-            Accommodation.ownership_doc_url != None  # ← only show if doc uploaded
+            Accommodation.ownership_doc_url != None
         ).order_by(Accommodation.created_at.desc())
     )
     listings = result.scalars().all()
 
-    return [
-        {
+    output = []
+    for l in listings:
+        # Fetch landlord
+        landlord_result = await db.execute(
+            select(Landlord).where(Landlord.id == l.landlord_id)
+        )
+        landlord = landlord_result.scalar_one_or_none()
+
+        # Decrypt ID number
+        id_number = None
+        if landlord and landlord.id_number_encrypted:
+            try:
+                from app.core.encryption import decrypt_value
+                id_number = decrypt_value(landlord.id_number_encrypted)
+            except Exception:
+                id_number = "Decryption failed"
+
+        output.append({
             "id": l.id,
             "title": l.title,
             "address": l.address,
             "price_min": l.price_min,
             "price_max": l.price_max,
-            "created_at": l.created_at
-        }
-        for l in listings
-    ]
+            "created_at": l.created_at,
+            "ownership_doc_url": l.ownership_doc_url,
+            "landlord": {
+                "display_name": landlord.display_name if landlord else None,
+                "contact_phone": landlord.contact_phone if landlord else None,
+                "id_number": id_number,
+                "verification_status": landlord.verification_status if landlord else None,
+            } if landlord else None,
+        })
+
+    return output
 # ── MODERATION LOG ────────────────────────────────────────────────────────────
 
 @router.get("/log")
