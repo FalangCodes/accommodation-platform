@@ -499,6 +499,7 @@ async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(ge
         "property_type": accommodation.property_type,
         "website": accommodation.website,
         "amenities": accommodation.amenities,
+        "ownership_doc_url": accommodation.ownership_doc_url,
         "images": [{"id": img.id, "url": img.blob_url, "order": img.display_order} for img in images],
         "total_reviews": total_reviews,
         "average_rating": average_rating,
