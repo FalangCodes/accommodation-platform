@@ -270,6 +270,7 @@ async def get_my_accommodations(
             "created_at": acc.created_at,
             "total_reviews": total_reviews,
             "average_rating": average_rating,
+            "ownership_doc_url": acc.ownership_doc_url,
         })
 
     return output
@@ -601,3 +602,44 @@ async def delete_accommodation_image(
     await db.commit()
 
     return {"detail": "Image deleted"}
+
+@router.post("/{accommodation_id}/documents/ownership", status_code=status.HTTP_200_OK)
+async def upload_ownership_document(
+    accommodation_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    # Verify landlord owns this listing
+    result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
+    landlord = result.scalar_one_or_none()
+    if not landlord:
+        raise HTTPException(status_code=404, detail="Landlord profile not found")
+
+    result = await db.execute(
+        select(Accommodation).where(
+            Accommodation.id == accommodation_id,
+            Accommodation.landlord_id == landlord.id
+        )
+    )
+    accommodation = result.scalar_one_or_none()
+    if not accommodation:
+        raise HTTPException(status_code=403, detail="Listing not found or does not belong to you")
+
+    # Validate file
+    allowed = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and PDF files are allowed")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File must be under 10MB")
+
+    blob_url = await upload_image(file_bytes, f"ownership_{accommodation_id}", file.content_type)
+    accommodation.ownership_doc_url = blob_url
+
+    # Invalidate cache
+    await cache_delete(key_listing(accommodation_id))
+    await db.commit()
+
+    return {"detail": "Ownership document uploaded", "url": blob_url}

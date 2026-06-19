@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api";
+import { api, accommodationsApi } from "@/lib/api";
 import PageLayout from "@/components/page-layout";
 import ImageUploader from "@/components/image-uploader";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,10 @@ import {
   Loader2, Home, CheckCircle, Clock, XCircle,
   Wifi, ShieldCheck, Zap, Wrench, Volume2, DollarSign, User,
   BarChart2, ArrowLeft,
-} from "lucide-react";
+} 
+from "lucide-react";
 import { toast } from "sonner";
-import { ImagePlus } from "lucide-react";
+import { ImagePlus, FileText } from "lucide-react";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ interface Listing {
   created_at: string;
   total_reviews: number;
   average_rating: number | null;
+  ownership_doc_url?: string | null;
 }
 
 interface Analytics {
@@ -137,7 +139,13 @@ function CreateListingModal({
   const update = (field: string, value: string | string[]) =>
   setForm((f) => ({ ...f, [field]: value }));
 
+  const [ownershipUploaded, setOwnershipUploaded] = useState(false);
+  const [uploadingOwnership, setUploadingOwnership] = useState(false);
+  const ownershipRef = useRef<HTMLInputElement>(null);
+
   const handleClose = () => {
+    setOwnershipUploaded(false);
+    setUploadingOwnership(false);
     if (submitting) return;
     onClose();
     setTimeout(() => {
@@ -197,18 +205,24 @@ function CreateListingModal({
       <DialogContent className="rounded-2xl max-w-lg bg-white">
         <DialogHeader>
           <DialogTitle>
-            {step === 1 ? "Listing details" : step === 2 ? "Location" : step === 3 ? "Pricing" : "Add photos"}
-          </DialogTitle>
-          <DialogDescription>
-            {step < 4
-              ? `Step ${step} of 3 — ${step === 1 ? "Basic information" : step === 2 ? "Where is the property?" : "Set your monthly price range"}`
-              : "Optional — Add photos to attract more students"}
-          </DialogDescription>
+          {step === 1 ? "Listing details"
+            : step === 2 ? "Location"
+            : step === 3 ? "Pricing & details"
+            : step === 4 ? "Ownership document"
+            : "Add photos"}
+        </DialogTitle>
+        <DialogDescription>
+          {step === 1 ? "Step 1 of 4 — Basic information"
+            : step === 2 ? "Step 2 of 4 — Where is the property?"
+            : step === 3 ? "Step 3 of 4 — Pricing and property details"
+            : step === 4 ? "Step 4 of 4 — Proof of ownership"
+            : "Optional — Add photos to attract more students"}
+        </DialogDescription>
         </DialogHeader>
 
         {/* Step indicator */}
         <div className="flex gap-1.5 mb-2">
-          {[1, 2, 3].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
               className={`h-1 flex-1 rounded-full transition-all ${s <= Math.min(step, 3) ? "bg-slate-900" : "bg-slate-200"}`}
@@ -298,7 +312,7 @@ function CreateListingModal({
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
                 <p className="text-xs text-amber-700">
-                  💡 Use <a href="https://maps.google.com" target="_blank" className="underline font-medium">Google Maps</a> to find exact coordinates — right-click on your property and copy the coordinates shown.
+                  💡 Use <a href="https://maps.google.com" target="_blank" className="underline font-medium">Google Maps</a> to find exact coordinates — right-click on your property and copy the coordinates shown. 
                 </p>
               </div>
             </>
@@ -421,8 +435,93 @@ function CreateListingModal({
             </>
           )}
 
-          {/* Step 4 — Photos */}
+          {/* Step 4 — Ownership document */}
           {step === 4 && newListingId && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-xs text-amber-700 font-medium mb-1">Required before moderator review</p>
+                <p className="text-xs text-amber-600">
+                  Your listing will only appear in the moderation queue once you upload proof of ownership — a title deed, lease agreement, or signed mandate letter.
+                </p>
+              </div>
+
+              <div
+                onClick={() => !uploadingOwnership && ownershipRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                  ownershipUploaded
+                    ? "border-emerald-300 bg-emerald-50"
+                    : uploadingOwnership
+                    ? "border-slate-200 bg-slate-50 cursor-not-allowed"
+                    : "border-slate-300 hover:border-slate-400 hover:bg-slate-50"
+                }`}
+              >
+                <input
+                  ref={ownershipRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !newListingId) return;
+                    setUploadingOwnership(true);
+                    try {
+                      await accommodationsApi.uploadOwnershipDoc(newListingId, file);
+                      setOwnershipUploaded(true);
+                      toast.success("Ownership document uploaded");
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.detail ?? "Upload failed");
+                    } finally {
+                      setUploadingOwnership(false);
+                    }
+                  }}
+                  disabled={uploadingOwnership}
+                />
+                {uploadingOwnership ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <p className="text-sm text-slate-500">Uploading...</p>
+                  </div>
+                ) : ownershipUploaded ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <CheckCircle className="h-10 w-10 text-emerald-500" />
+                    <p className="text-sm font-semibold text-emerald-700">Document uploaded</p>
+                    <p className="text-xs text-emerald-600">Click to replace</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center">
+                      <FileText className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">Click to upload ownership document</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Title deed, lease agreement or mandate · PDF, JPEG, PNG · Max 10MB</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                {!ownershipUploaded && (
+                  <Button
+                    variant="outline"
+                    className="flex-1 rounded-xl text-slate-500"
+                    onClick={() => setStep(5)}
+                  >
+                    Skip for now
+                  </Button>
+                )}
+                <Button
+                  className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+                  onClick={() => setStep(5)}
+                >
+                  {ownershipUploaded ? "Continue to photos" : "Skip to photos"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5 — Photos */}
+          {step === 5 && newListingId && (
             <ImageUploader
               accommodationId={newListingId}
               onDone={handleClose}
@@ -754,6 +853,64 @@ function VerificationBanner({
   );
 }
 
+function OwnershipDocUploader({ accommodationId, onSuccess }: { accommodationId: number; onSuccess: () => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      await accommodationsApi.uploadOwnershipDoc(accommodationId, file);
+      setUploaded(true);
+      setTimeout(onSuccess, 1000);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={() => !uploading && fileRef.current?.click()}
+      className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+        uploaded ? "border-emerald-300 bg-emerald-50" :
+        uploading ? "border-slate-200 bg-slate-50 cursor-not-allowed" :
+        "border-slate-300 hover:border-slate-400 hover:bg-slate-50"
+      }`}
+    >
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+        disabled={uploading}
+      />
+      {uploading ? (
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+          <p className="text-sm text-slate-500">Uploading...</p>
+        </div>
+      ) : uploaded ? (
+        <div className="flex flex-col items-center gap-2">
+          <CheckCircle className="h-10 w-10 text-emerald-500" />
+          <p className="text-sm font-semibold text-emerald-700">Uploaded successfully</p>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center">
+            <FileText className="h-6 w-6 text-slate-400" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">Click to upload</p>
+          <p className="text-xs text-slate-400">Title deed, lease or mandate · PDF, JPEG, PNG · Max 10MB</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -763,6 +920,8 @@ export default function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [managingImages, setManagingImages] = useState<Listing | null>(null);
+  const [uploadingOwnershipFor, setUploadingOwnershipFor] = useState<Listing | null>(null);
+  
 
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/dashboard");
@@ -970,6 +1129,26 @@ export default function DashboardPage() {
             <ImageUploader
               accommodationId={managingImages.id}
               showDoneButton={false}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Ownership doc dialog */}
+      <Dialog open={!!uploadingOwnershipFor} onOpenChange={() => setUploadingOwnershipFor(null)}>
+        <DialogContent className="rounded-2xl max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle>Upload ownership document</DialogTitle>
+            <DialogDescription>{uploadingOwnershipFor?.title}</DialogDescription>
+          </DialogHeader>
+          {uploadingOwnershipFor && (
+            <OwnershipDocUploader
+              accommodationId={uploadingOwnershipFor.id}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["my-listings"] });
+                setUploadingOwnershipFor(null);
+                toast.success("Ownership document uploaded. Your listing will now appear in the moderation queue.");
+              }}
             />
           )}
         </DialogContent>

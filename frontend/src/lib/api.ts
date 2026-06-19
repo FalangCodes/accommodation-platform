@@ -103,6 +103,13 @@ export const accommodationsApi = {
   deleteImage: (accommodationId: number, imageId: number) =>
     api.delete(`/api/v1/accommodations/${accommodationId}/images/${imageId}`),
   recordView: (id: number) => api.post(`/api/v1/accommodations/${id}/view`),
+  uploadOwnershipDoc: (accommodationId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/api/v1/accommodations/${accommodationId}/documents/ownership`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 // ── REVIEWS ───────────────────────────────────────────────────────────────────

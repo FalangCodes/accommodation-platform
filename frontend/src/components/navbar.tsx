@@ -63,10 +63,11 @@ export default function Navbar() {
                 Moderation
               </Link>
             )}
-          </div>
-          {isAdmin && (
+            {isAdmin && (
             <Link href="/admin">Admin</Link>
           )}
+          </div>
+          
 
           {/* ── Right side actions (desktop) ── */}
           <div className="hidden md:flex items-center gap-3 shrink-0">

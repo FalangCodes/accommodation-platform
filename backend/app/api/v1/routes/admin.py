@@ -480,3 +480,20 @@ async def activate_user(
     await db.commit()
 
     return {"detail": f"User {user.email} activated", "user_id": user_id}
+
+
+
+@router.get("/accommodations/{accommodation_id}/views")
+async def get_accommodation_views(
+    accommodation_id: int,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(func.count(AccommodationView.id)).where(
+            AccommodationView.accommodation_id == accommodation_id
+        )
+    )
+    db_views = result.scalar() or 0
+    today_views = await get_today_views(accommodation_id)
+    return {"total_views": db_views + today_views}

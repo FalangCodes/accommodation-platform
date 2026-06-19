@@ -129,8 +129,12 @@ async def get_pending_listings(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Accommodation).where(Accommodation.status == "pending")
-    result = await db.execute(query)
+    result = await db.execute(
+        select(Accommodation).where(
+            Accommodation.status == "pending",
+            Accommodation.ownership_doc_url != None  # ← only show if doc uploaded
+        ).order_by(Accommodation.created_at.desc())
+    )
     listings = result.scalars().all()
 
     return [
@@ -144,7 +148,6 @@ async def get_pending_listings(
         }
         for l in listings
     ]
-
 # ── MODERATION LOG ────────────────────────────────────────────────────────────
 
 @router.get("/log")
