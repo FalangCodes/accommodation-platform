@@ -3,32 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { reviewsApi } from "@/lib/api";
+import { reviewsApi, api } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import PageLayout from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  GraduationCap,
-  Star,
-  Trash2,
-  MapPin,
-  ShieldCheck,
-  Loader2,
-  AlertTriangle,
-  User,
-  Mail,
-  BookOpen,
-  Clock,
+  GraduationCap, Star, Trash2, MapPin, ShieldCheck, Loader2,
+  AlertTriangle, Mail, BookOpen, Clock, Home, BarChart2,
+  CheckCircle, XCircle, Activity, Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Review {
   id: number;
@@ -40,27 +32,72 @@ interface Review {
   created_at: string;
 }
 
-export default function ProfilePage() {
-  const { user, loading, isStudent } = useAuth();
-  const router = useRouter();
+interface LandlordProfile {
+  id: number;
+  display_name: string;
+  contact_phone: string | null;
+  bio: string | null;
+  website: string | null;
+  verification_status: string;
+  rejection_reason: string | null;
+  id_copy_uploaded: boolean;
+  proof_of_address_uploaded: boolean;
+  id_number_verified: boolean;
+  verified_at: string | null;
+}
 
+interface LandlordListing {
+  id: number;
+  title: string;
+  address: string;
+  status: string;
+  total_reviews: number;
+  average_rating: number | null;
+}
+
+interface ModeratorStats {
+  actions_count: number;
+  recent_actions: {
+    id: number;
+    action: string;
+    resource_type: string;
+    resource_id: number;
+    reason: string | null;
+    created_at: string;
+  }[];
+}
+
+// ─── Role badge config ────────────────────────────────────────────────────────
+
+const ROLE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+  student:   { label: "Student",   color: "bg-slate-100 text-slate-700",        icon: GraduationCap },
+  landlord:  { label: "Landlord",  color: "bg-blue-50 text-blue-700",            icon: Home },
+  moderator: { label: "Moderator", color: "bg-violet-50 text-violet-700",        icon: ShieldCheck },
+  admin:     { label: "Admin",     color: "bg-slate-900 text-white",             icon: ShieldCheck },
+};
+
+const VERIFICATION_COLORS: Record<string, string> = {
+  verified:   "bg-emerald-50 text-emerald-700",
+  pending:    "bg-amber-50 text-amber-700",
+  unverified: "bg-slate-100 text-slate-600",
+  rejected:   "bg-red-50 text-red-700",
+};
+
+// ─── Student profile ──────────────────────────────────────────────────────────
+
+function StudentProfile({ user }: { user: any }) {
+  const router = useRouter();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.push("/login?redirect=/profile");
-  }, [user, loading]);
-
-  useEffect(() => {
-    if (!user || !isStudent) return;
-    reviewsApi
-      .getMyReviews()
+    reviewsApi.getMyReviews()
       .then((res) => setReviews(res.data))
       .catch(() => toast.error("Failed to load reviews"))
       .finally(() => setReviewsLoading(false));
-  }, [user]);
+  }, []);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -81,6 +118,386 @@ export default function ProfilePage() {
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
     : null;
 
+  return (
+    <>
+      {/* Stats */}
+      {reviews.length > 0 && (
+        <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-100">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-slate-900">{reviews.length}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Reviews submitted</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-slate-900 flex items-center justify-center gap-1.5">
+              <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+              {averageRating}
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">Average rating given</div>
+          </div>
+        </div>
+      )}
+
+      {/* Reviews section */}
+      <div className="mt-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">My Reviews</h2>
+          <span className="text-sm text-slate-400">{reviews.length} review{reviews.length !== 1 ? "s" : ""}</span>
+        </div>
+
+        {reviewsLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+          </div>
+        ) : reviews.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <BookOpen className="h-7 w-7 text-slate-300" />
+            </div>
+            <p className="font-semibold text-slate-900 mb-1">No reviews yet</p>
+            <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">
+              Find accommodation near your campus and share your experience.
+            </p>
+            <Button onClick={() => router.push("/search")} className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl">
+              Find accommodation
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {reviews.map((review) => (
+              <div key={review.id} className="bg-white rounded-2xl border border-slate-200 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => router.push(`/listings/${review.accommodation_id}`)}
+                      className="text-sm font-semibold text-slate-900 hover:text-slate-600 transition-colors mb-2 text-left line-clamp-1"
+                    >
+                      {review.accommodation_title}
+                    </button>
+                    <div className="flex items-center gap-1 mb-2">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star key={i} className={`h-3.5 w-3.5 ${i < review.rating ? "fill-amber-400 text-amber-400" : "text-slate-200 fill-slate-200"}`} />
+                      ))}
+                      <span className="text-xs text-slate-400 ml-1">{review.rating}/5</span>
+                    </div>
+                    <p className="text-sm text-slate-600 leading-relaxed line-clamp-2 mb-3">{review.body}</p>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xs text-slate-400">
+                        {new Date(review.created_at).toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" })}
+                      </span>
+                      <Badge className={`text-xs border-0 rounded-full ${
+                        review.status === "analysed" || review.status === "released" ? "bg-emerald-50 text-emerald-700" :
+                        review.status === "quarantined" ? "bg-red-50 text-red-700" :
+                        "bg-amber-50 text-amber-700"
+                      }`}>
+                        {review.status === "analysed" || review.status === "released" ? "✓ Published" :
+                         review.status === "quarantined" ? "⚠️ Under review" : "⏳ Pending analysis"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setDeleteTarget(review.id)}
+                    className="shrink-0 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent className="rounded-2xl max-w-sm bg-white">
+          <DialogHeader>
+            <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-red-50 border border-red-100 mx-auto mb-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+            </div>
+            <DialogTitle className="text-center">Delete this review?</DialogTitle>
+            <DialogDescription className="text-center text-sm">
+              You won't be able to re-review this accommodation for <strong>14 days</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button onClick={handleDelete} disabled={deleting} className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white">
+              {deleting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Deleting...</> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ─── Landlord profile ─────────────────────────────────────────────────────────
+
+function LandlordProfile({ user }: { user: any }) {
+  const router = useRouter();
+
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ["landlord-profile"],
+    queryFn: () => api.get("/api/v1/landlords/me").then(r => r.data as LandlordProfile),
+  });
+
+  const { data: listings = [], isLoading: listingsLoading } = useQuery({
+    queryKey: ["my-listings"],
+    queryFn: () => api.get("/api/v1/accommodations/my").then(r => r.data as LandlordListing[]),
+  });
+
+  const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+    approved: { label: "Live", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
+    pending:  { label: "Pending", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
+    rejected: { label: "Rejected", color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
+  };
+
+  return (
+    <div className="mt-6 space-y-6">
+      {/* Verification status */}
+      {profileLoading ? (
+        <Skeleton className="h-24 rounded-2xl" />
+      ) : profile && profile.verification_status !== "verified" && (
+        <div className={`rounded-2xl border p-4 ${
+          profile.verification_status === "pending" ? "bg-amber-50 border-amber-200" :
+          profile.verification_status === "rejected" ? "bg-red-50 border-red-200" :
+          "bg-slate-50 border-slate-200"
+        }`}>
+          <p className="text-sm font-semibold text-slate-800 mb-1">
+            {profile.verification_status === "pending" ? "Verification under review" :
+             profile.verification_status === "rejected" ? "Verification rejected" :
+             "Account not yet verified"}
+          </p>
+          <p className="text-xs text-slate-600">
+            {profile.verification_status === "rejected"
+              ? profile.rejection_reason ?? "Please resubmit your documents."
+              : profile.verification_status === "pending"
+              ? "An admin will review your documents shortly."
+              : "Complete your verification to start listing properties."}
+          </p>
+          {profile.verification_status !== "pending" && (
+            <Button
+              size="sm"
+              className="mt-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+              onClick={() => router.push("/dashboard")}
+            >
+              Go to dashboard
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Account details */}
+      {profile && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <h2 className="font-semibold text-slate-900 mb-4">Account details</h2>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-500">Display name</span>
+              <span className="text-sm font-medium text-slate-800">{profile.display_name}</span>
+            </div>
+            {profile.contact_phone && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-500">Phone</span>
+                <span className="text-sm font-medium text-slate-800">{profile.contact_phone}</span>
+              </div>
+            )}
+            {profile.website && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-500">Website</span>
+                <a href={profile.website} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline font-medium">
+                  {profile.website}
+                </a>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-500">Verification</span>
+              <Badge className={`text-xs border-0 rounded-full capitalize ${VERIFICATION_COLORS[profile.verification_status]}`}>
+                {profile.verification_status}
+              </Badge>
+            </div>
+            {profile.verified_at && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-500">Verified on</span>
+                <span className="text-sm text-slate-600">
+                  {new Date(profile.verified_at).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Listings summary */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-900">My listings</h2>
+          <Button size="sm" variant="outline" className="rounded-xl" onClick={() => router.push("/dashboard")}>
+            Manage listings
+          </Button>
+        </div>
+        {listingsLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-2xl" />)}
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+            <Building2 className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm text-slate-500">No listings yet. Go to your dashboard to add one.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {listings.map((listing: any) => {
+              const cfg = STATUS_CONFIG[listing.status] ?? STATUS_CONFIG.pending;
+              const Icon = cfg.icon;
+              return (
+                <div
+                  key={listing.id}
+                  onClick={() => router.push(`/listings/${listing.id}`)}
+                  className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{listing.title}</p>
+                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3" />{listing.address}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {listing.average_rating && (
+                      <span className="text-xs text-slate-500 flex items-center gap-1">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        {listing.average_rating.toFixed(1)}
+                      </span>
+                    )}
+                    <Badge className={`text-xs border rounded-full px-2 py-0.5 ${cfg.color}`}>
+                      <Icon className="w-3 h-3 mr-1" />
+                      {cfg.label}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Moderator/Admin profile ──────────────────────────────────────────────────
+
+function ModeratorProfile({ user }: { user: any }) {
+  const router = useRouter();
+  const { isAdmin } = useAuth();
+
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ["moderator-stats", user.id],
+    queryFn: async () => {
+      const { data } = await api.get("/api/v1/moderation/log");
+      const myActions = data.filter((log: any) => log.moderator_id === user.id);
+      return {
+        actions_count: myActions.length,
+        recent_actions: myActions.slice(0, 10),
+      } as ModeratorStats;
+    },
+  });
+
+  const ACTION_COLORS: Record<string, string> = {
+    approved: "text-emerald-600",
+    rejected: "text-red-500",
+    removed: "text-red-500",
+    released: "text-blue-600",
+    landlord_verified: "text-emerald-600",
+    landlord_verification_rejected: "text-red-500",
+  };
+
+  return (
+    <div className="mt-6 space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center">
+          <div className="text-2xl font-bold text-slate-900">{stats?.actions_count ?? 0}</div>
+          <div className="text-xs text-slate-500 mt-1">Total actions logged</div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center">
+          <div className="text-2xl font-bold text-slate-900 capitalize">{user.role}</div>
+          <div className="text-xs text-slate-500 mt-1">Account type</div>
+        </div>
+      </div>
+
+      {/* Quick links */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
+        <h2 className="font-semibold text-slate-900 mb-4">Quick access</h2>
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="outline"
+            className="rounded-xl justify-start gap-2"
+            onClick={() => router.push("/moderation")}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Moderation panel
+          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              className="rounded-xl justify-start gap-2"
+              onClick={() => router.push("/admin")}
+            >
+              <BarChart2 className="w-4 h-4" />
+              Admin dashboard
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Recent activity */}
+      <div>
+        <h2 className="text-lg font-bold text-slate-900 mb-4">My recent activity</h2>
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-2xl" />)}
+          </div>
+        ) : !stats || stats.recent_actions.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+            <Activity className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm text-slate-500">No moderation actions yet.</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-50">
+            {stats.recent_actions.map((log) => (
+              <div key={log.id} className="flex items-center gap-3 px-5 py-3">
+                <div className="w-2 h-2 rounded-full bg-slate-300 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className={`text-sm font-medium capitalize ${ACTION_COLORS[log.action] ?? "text-slate-700"}`}>
+                    {log.action.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-sm text-slate-400"> · {log.resource_type} #{log.resource_id}</span>
+                  {log.reason && (
+                    <p className="text-xs text-slate-400 mt-0.5 truncate">{log.reason}</p>
+                  )}
+                </div>
+                <span className="text-xs text-slate-400 flex-shrink-0">
+                  {new Date(log.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function ProfilePage() {
+  const { user, loading, isStudent, isLandlord, isModerator } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) router.push("/login?redirect=/profile");
+  }, [user, loading]);
+
   if (loading) {
     return (
       <PageLayout>
@@ -94,6 +511,8 @@ export default function ProfilePage() {
   if (!user) return null;
 
   const username = user.email.split("@")[0];
+  const roleCfg = ROLE_CONFIG[user.role] ?? ROLE_CONFIG.student;
+  const RoleIcon = roleCfg.icon;
 
   return (
     <PageLayout>
@@ -114,190 +533,31 @@ export default function ProfilePage() {
                 {user.email}
               </p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <Badge className="bg-slate-100 text-slate-700 border-0 gap-1.5 rounded-full">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                  Student
+                <Badge className={`border-0 gap-1.5 rounded-full text-xs ${roleCfg.color}`}>
+                  <RoleIcon className="h-3.5 w-3.5" />
+                  {roleCfg.label}
                 </Badge>
                 {user.is_active ? (
-                  <Badge className="bg-emerald-50 text-emerald-700 border-0 gap-1.5 rounded-full">
-                    <ShieldCheck className="h-3.5 w-3.5" />
+                  <Badge className="bg-emerald-50 text-emerald-700 border-0 gap-1.5 rounded-full text-xs">
+                    <CheckCircle className="h-3.5 w-3.5" />
                     Active
                   </Badge>
                 ) : (
-                  <Badge className="bg-amber-50 text-amber-700 border-0 gap-1.5 rounded-full">
+                  <Badge className="bg-amber-50 text-amber-700 border-0 gap-1.5 rounded-full text-xs">
                     <Clock className="h-3.5 w-3.5" />
-                    Pending verification
+                    Inactive
                   </Badge>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Stats row */}
-          {reviews.length > 0 && (
-            <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-100">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-900">{reviews.length}</div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  Review{reviews.length !== 1 ? "s" : ""} submitted
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-900 flex items-center justify-center gap-1.5">
-                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-                  {averageRating}
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5">Average rating given</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── My Reviews ── */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-slate-900">My Reviews</h2>
-            <span className="text-sm text-slate-400">
-              {reviews.length} review{reviews.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          {reviewsLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-            </div>
-          ) : reviews.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="h-7 w-7 text-slate-300" />
-              </div>
-              <p className="font-semibold text-slate-900 mb-1">No reviews yet</p>
-              <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">
-                Find accommodation near your campus and share your experience with other students.
-              </p>
-              <Button
-                onClick={() => router.push("/search")}
-                className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl"
-              >
-                Find accommodation
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {reviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-
-                      {/* Accommodation name */}
-                      <button
-                        onClick={() => router.push(`/listings/${review.accommodation_id}`)}
-                        className="text-sm font-semibold text-slate-900 hover:text-slate-600 transition-colors mb-2 text-left line-clamp-1"
-                      >
-                        {review.accommodation_title}
-                      </button>
-
-                      {/* Rating */}
-                      <div className="flex items-center gap-1 mb-2">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`h-3.5 w-3.5 ${
-                              i < review.rating
-                                ? "fill-amber-400 text-amber-400"
-                                : "text-slate-200 fill-slate-200"
-                            }`}
-                          />
-                        ))}
-                        <span className="text-xs text-slate-400 ml-1">{review.rating}/5</span>
-                      </div>
-
-                      {/* Body */}
-                      <p className="text-sm text-slate-600 leading-relaxed line-clamp-2 mb-3">
-                        {review.body}
-                      </p>
-
-                      {/* Meta */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-xs text-slate-400">
-                          {new Date(review.created_at).toLocaleDateString("en-ZA", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
-                        </span>
-                        <Badge
-                          className={`text-xs border-0 rounded-full ${
-                            review.status === "analysed" || review.status === "released"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : review.status === "quarantined"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-amber-50 text-amber-700"
-                          }`}
-                        >
-                          {review.status === "analysed" || review.status === "released"
-                            ? "✓ Published"
-                            : review.status === "quarantined"
-                            ? "⚠️ Under review"
-                            : "⏳ Pending analysis"}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* Delete button */}
-                    <button
-                      onClick={() => setDeleteTarget(review.id)}
-                      className="shrink-0 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                      title="Delete review"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Role-specific content */}
+          {isStudent && <StudentProfile user={user} />}
+          {isLandlord && <LandlordProfile user={user} />}
+          {isModerator && <ModeratorProfile user={user} />}
         </div>
       </div>
-
-      {/* ── Delete confirmation dialog ── */}
-      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <DialogContent className="rounded-2xl max-w-sm">
-          <DialogHeader>
-            <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-red-50 border border-red-100 mx-auto mb-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-            </div>
-            <DialogTitle className="text-center">Delete this review?</DialogTitle>
-            <DialogDescription className="text-center text-sm">
-              You won't be able to re-review this accommodation for{" "}
-              <strong>14 days</strong> after deletion.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2 mt-2">
-            <Button
-              variant="outline"
-              className="flex-1 rounded-xl"
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white"
-            >
-              {deleting ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Deleting...</>
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PageLayout>
   );
 }

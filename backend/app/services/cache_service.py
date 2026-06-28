@@ -31,8 +31,8 @@ TTL_ANALYTICS    = 60 * 30        # 30 minutes
 def key_universities() -> str:
     return "universities:all"
 
-def key_search(university_id, radius_km, price_min, price_max, min_rating, page) -> str:
-    raw = f"{university_id}:{radius_km}:{price_min}:{price_max}:{min_rating}:{page}"
+def key_search(university_id, radius_km, price_min, price_max, min_rating, page, gender_policy=None, funding_type=None):
+    raw = f"{university_id}:{radius_km}:{price_min}:{price_max}:{min_rating}:{page}:{gender_policy}:{funding_type}"
     return f"search:{hashlib.md5(raw.encode()).hexdigest()}"
 
 def key_listing(accommodation_id: int) -> str:

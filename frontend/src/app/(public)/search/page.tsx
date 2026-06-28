@@ -112,6 +112,8 @@ async function fetchAccommodations(params: {
   price_min?: number;
   price_max?: number;
   min_rating?: number;
+  gender_policy?: string;
+  funding_type?: string;
   page: number;
 }): Promise<SearchResponse> {
   const query = new URLSearchParams();
@@ -120,6 +122,8 @@ async function fetchAccommodations(params: {
   if (params.price_min)    query.set("price_min", String(params.price_min));
   if (params.price_max)    query.set("price_max", String(params.price_max));
   if (params.min_rating)   query.set("min_rating", String(params.min_rating));
+  if (params.gender_policy) query.set("gender_policy", params.gender_policy);  // ← add
+  if (params.funding_type)  query.set("funding_type", params.funding_type);    // ← add
   query.set("page", String(params.page));
   query.set("page_size", String(PAGE_SIZE));
 
@@ -372,7 +376,8 @@ function FilterBar({
         >
           <SlidersHorizontal className="w-4 h-4" />
           More filters
-          {(filters.price_min > 0 || filters.price_max < 15000 || filters.min_rating > 0) && (
+          {(filters.price_min > 0 || filters.price_max < 15000 || filters.min_rating > 0 || 
+            filters.gender_policy !== undefined || filters.funding_type !== undefined) && (
             <span className="w-2 h-2 rounded-full bg-blue-500" />
           )}
         </Button>
@@ -442,6 +447,58 @@ function FilterBar({
                   )}
                 </button>
               ))}
+
+              {/* Gender policy */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
+                  Gender policy
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { value: undefined, label: "Any" },
+                    { value: "male", label: "Male only" },
+                    { value: "female", label: "Female only" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.label}
+                      onClick={() => onChange({ gender_policy: opt.value as any })}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                        filters.gender_policy === opt.value
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Funding type */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
+                  Funding type
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { value: undefined, label: "Any" },
+                    { value: "self_funded", label: "Self-funded" },
+                    { value: "bursary", label: "Bursary" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.label}
+                      onClick={() => onChange({ funding_type: opt.value as any })}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                        filters.funding_type === opt.value
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -458,6 +515,8 @@ interface Filters {
   price_min: number;
   price_max: number;
   min_rating: number;
+  gender_policy?: "male" | "female";   // ← add
+  funding_type?: "self_funded" | "bursary";  // ← add
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -476,6 +535,8 @@ function SearchPageInner() {
     price_min: Number(searchParams.get("price_min") ?? 0),
     price_max: Number(searchParams.get("price_max") ?? 15000),
     min_rating: Number(searchParams.get("min_rating") ?? 0),
+    gender_policy: undefined,
+    funding_type: undefined,
   });
 
   // Applied filters — only update when user clicks Search
