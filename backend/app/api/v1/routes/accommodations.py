@@ -182,13 +182,13 @@ async def search_accommodations(
     if price_max is not None:
         filter_clauses.append("a.price_min <= :price_max")
         params["price_max"] = price_max
-    where_extra = (" AND " + " AND ".join(filter_clauses)) if filter_clauses else ""
     if gender_policy is not None:
         filter_clauses.append("(a.gender_policy = :gender_policy OR a.gender_policy = 'mixed')")
         params["gender_policy"] = gender_policy
     if funding_type is not None:
         filter_clauses.append("(a.funding_type = :funding_type OR a.funding_type = 'both')")
         params["funding_type"] = funding_type
+    where_extra = (" AND " + " AND ".join(filter_clauses)) if filter_clauses else ""  # ← now at the end
 
     having_clause = ""
     if min_rating is not None:

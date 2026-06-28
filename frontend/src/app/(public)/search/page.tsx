@@ -394,6 +394,7 @@ function FilterBar({
       {/* Expandable filters */}
       {open && (
         <div className="border-t border-slate-100 p-4 grid grid-cols-1 sm:grid-cols-2 gap-6">
+
           {/* Price range */}
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
@@ -426,7 +427,7 @@ function FilterBar({
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
               Minimum rating
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {[0, 3, 3.5, 4, 4.5].map((r) => (
                 <button
                   key={r}
@@ -447,60 +448,61 @@ function FilterBar({
                   )}
                 </button>
               ))}
-
-              {/* Gender policy */}
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
-                  Gender policy
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { value: undefined, label: "Any" },
-                    { value: "male", label: "Male only" },
-                    { value: "female", label: "Female only" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.label}
-                      onClick={() => onChange({ gender_policy: opt.value as any })}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                        filters.gender_policy === opt.value
-                          ? "bg-slate-900 text-white border-slate-900"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Funding type */}
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
-                  Funding type
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { value: undefined, label: "Any" },
-                    { value: "self_funded", label: "Self-funded" },
-                    { value: "bursary", label: "Bursary" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.label}
-                      onClick={() => onChange({ funding_type: opt.value as any })}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                        filters.funding_type === opt.value
-                          ? "bg-slate-900 text-white border-slate-900"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
+
+          {/* Gender policy */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
+              Gender policy
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { value: undefined, label: "Any" },
+                { value: "male", label: "Male only" },
+                { value: "female", label: "Female only" },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => onChange({ gender_policy: opt.value as any })}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                    filters.gender_policy === opt.value
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Funding type */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 block">
+              Funding type
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { value: undefined, label: "Any" },
+                { value: "self_funded", label: "Self-funded" },
+                { value: "bursary", label: "Bursary" },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => onChange({ funding_type: opt.value as any })}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                    filters.funding_type === opt.value
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
         </div>
       )}
     </div>
