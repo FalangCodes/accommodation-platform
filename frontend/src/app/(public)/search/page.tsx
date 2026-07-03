@@ -537,12 +537,22 @@ function SearchPageInner() {
     price_min: Number(searchParams.get("price_min") ?? 0),
     price_max: Number(searchParams.get("price_max") ?? 15000),
     min_rating: Number(searchParams.get("min_rating") ?? 0),
-    gender_policy: undefined,
-    funding_type: undefined,
+    gender_policy: (searchParams.get("gender_policy") as "male" | "female") ?? undefined,
+    funding_type: (searchParams.get("funding_type") as "self_funded" | "bursary") ?? undefined,
   });
 
   // Applied filters — only update when user clicks Search
-  const [appliedFilters, setAppliedFilters] = useState<Filters>(filters);
+  const [appliedFilters, setAppliedFilters] = useState<Filters>({
+    university_id: searchParams.get("university_id")
+      ? Number(searchParams.get("university_id"))
+      : undefined,
+    radius_km: Number(searchParams.get("radius_km") ?? 5),
+    price_min: Number(searchParams.get("price_min") ?? 0),
+    price_max: Number(searchParams.get("price_max") ?? 15000),
+    min_rating: Number(searchParams.get("min_rating") ?? 0),
+    gender_policy: (searchParams.get("gender_policy") as "male" | "female") ?? undefined,
+    funding_type: (searchParams.get("funding_type") as "self_funded" | "bursary") ?? undefined,
+  });
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
 
@@ -589,6 +599,18 @@ function SearchPageInner() {
   const handleApplyFilters = () => {
     setAppliedFilters(filters);
     setPage(1);
+
+    const params = new URLSearchParams();
+    if (filters.university_id) params.set("university_id", String(filters.university_id));
+    if (filters.radius_km !== 5) params.set("radius_km", String(filters.radius_km));
+    if (filters.price_min > 0) params.set("price_min", String(filters.price_min));
+    if (filters.price_max < 15000) params.set("price_max", String(filters.price_max));
+    if (filters.min_rating > 0) params.set("min_rating", String(filters.min_rating));
+    if (filters.gender_policy) params.set("gender_policy", filters.gender_policy);
+    if (filters.funding_type) params.set("funding_type", filters.funding_type);
+    params.set("page", "1");
+
+    router.replace(`/search?${params.toString()}`, { scroll: false });
   };
 
   return (

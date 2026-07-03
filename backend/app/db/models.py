@@ -8,3 +8,4 @@ from app.models.university import University
 from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
 from app.models.review import Review, ReviewNLPResult, ReviewReply
 from app.models.moderation import ModerationLog, ModerationQueue, Appeal
+from app.models.report import MonthlyReport, ReportMetric

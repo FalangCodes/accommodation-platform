@@ -6,8 +6,10 @@ from app.api.v1.routes import auth, accommodations, reviews, moderation
 from app.api.v1.routes.universities import router as universities_router
 from app.api.v1.routes.landlords import router as landlords_router
 from app.api.v1.routes.admin import router as admin_router
+from app.api.v1.routes.reports import router as reports_router
 from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
+from app.services.report_service import run_monthly_auto_reports
 import app.db.models
 
 scheduler = AsyncIOScheduler()
@@ -29,6 +31,14 @@ async def lifespan(app: FastAPI):
     )
     # ── For testing: flush every 1 minute ──
     # scheduler.add_job(scheduled_flush, "interval", minutes=1, id="flush_views")
+    scheduler.add_job(
+        run_monthly_auto_reports,
+        "cron",
+        day=1,
+        hour=0,
+        minute=5,
+        id="monthly_reports"
+    )
     scheduler.start()
     print("Scheduler started")
     yield
@@ -60,6 +70,7 @@ app.include_router(moderation.router, prefix="/api/v1")
 app.include_router(universities_router, prefix="/api/v1")
 app.include_router(landlords_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(reports_router, prefix="/api/v1")
 
 
 @app.get("/health")

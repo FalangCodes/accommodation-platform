@@ -191,3 +191,14 @@ export const adminApi = {
   deactivateUser: (id: number) => api.patch(`/api/v1/admin/users/${id}/deactivate`),
   activateUser: (id: number) => api.patch(`/api/v1/admin/users/${id}/activate`),
 };
+
+// ── REPORTS ───────────────────────────────────────────────────────────────────
+export const reportsApi = {
+  generate: (data: { report_type: string; year: number; month: number; entity_id?: number }) =>
+    api.post("/api/v1/reports/generate", data),
+  list: (params?: { report_type?: string; entity_id?: number }) =>
+    api.get("/api/v1/reports", { params }),
+  get: (id: number) => api.get(`/api/v1/reports/${id}`),
+  getAccommodationTrend: (accommodationId: number) =>
+    api.get(`/api/v1/reports/accommodation/${accommodationId}/trend`),
+};
