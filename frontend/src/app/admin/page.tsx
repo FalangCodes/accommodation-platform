@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { adminApi } from "@/lib/api";
-import { reportsApi } from "@/lib/api";
+import { adminApi, reportsApi, moderationApi } from "@/lib/api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { FileText, Download, RefreshCw, Calendar } from "lucide-react";
 import PageLayout from "@/components/page-layout";
@@ -20,6 +19,7 @@ import {
   Building2, ChevronDown, ChevronRight, MapPin, Globe,
   CheckCircle, XCircle, Clock, AlertTriangle, Plus,
   GraduationCap, UserCheck, UserX, BarChart2, Activity,
+  ChevronLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -121,6 +121,38 @@ interface ReportDetail {
   entity_id: number | null;
   entity_name?: string | null;
   metrics: Record<string, { key: string; label: string; value: number; breakdown: Record<string, any> | null }[]>;
+}
+
+interface ModerationLogEntry {
+  id: number;
+  moderator_email: string;
+  action: string;
+  resource_type: string;
+  resource_id: number;
+  reason: string | null;
+  created_at: string;
+  resource_detail: {
+    // accommodation
+    title?: string;
+    address?: string;
+    landlord_name?: string;
+    landlord_phone?: string;
+    // review
+    body?: string;
+    rating?: number;
+    status?: string;
+    student_name?: string;
+    // landlord
+    display_name?: string;
+    verification_status?: string;
+  };
+}
+
+interface ModerationLogResponse {
+  items: ModerationLogEntry[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -458,6 +490,9 @@ function UserManagementTab() {
   const [modForm, setModForm] = useState({ email: "", password: "" });
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [landlordSearch, setLandlordSearch] = useState("");
+  const [moderatorSearch, setModeratorSearch] = useState("");
 
   const { data: students = [], isLoading: studentsLoading } = useQuery({
     queryKey: ["admin-students"],
@@ -513,6 +548,32 @@ function UserManagementTab() {
     }
   };
 
+  const filteredStudents = students.filter((s: Student) => {
+    if (!studentSearch.trim()) return true;
+    const q = studentSearch.toLowerCase().trim();
+    return (
+      s.email.toLowerCase().includes(q) ||
+      s.first_name?.toLowerCase().includes(q) ||
+      s.last_name?.toLowerCase().includes(q) ||
+      s.student_number?.toLowerCase().includes(q) ||
+      `${s.first_name} ${s.last_name}`.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredLandlords = landlords.filter((l: Landlord) => {
+    if (!landlordSearch.trim()) return true;
+    const q = landlordSearch.toLowerCase().trim();
+    return (
+      l.display_name.toLowerCase().includes(q) ||
+      l.email.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredModerators = moderators.filter((m: Moderator) => {
+    if (!moderatorSearch.trim()) return true;
+    return m.email.toLowerCase().includes(moderatorSearch.toLowerCase().trim());
+  });
+
   const inputClass = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white";
 
   return (
@@ -535,17 +596,37 @@ function UserManagementTab() {
       {/* Students */}
       {subTab === "students" && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900 text-sm">All students</h3>
-            <span className="text-xs text-slate-400">{students.length} total</span>
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-slate-900 text-sm flex-shrink-0">All students</h3>
+            <div className="flex items-center gap-3 flex-1 justify-end">
+              <input
+                type="text"
+                placeholder="Search by name, email, number..."
+                value={studentSearch}
+                onChange={e => setStudentSearch(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white w-56"
+              />
+              <span className="text-xs text-slate-400 flex-shrink-0">{filteredStudents.length} total</span>
+            </div>
           </div>
           {studentsLoading ? (
             <div className="p-4 space-y-3">
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
             </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-slate-400">
+                {studentSearch.trim() ? `No students match "${studentSearch}"` : "No students yet."}
+              </p>
+              {studentSearch.trim() && (
+                <button onClick={() => setStudentSearch("")} className="text-xs text-slate-400 hover:text-slate-600 underline mt-1">
+                  Clear search
+                </button>
+              )}
+            </div>
           ) : (
             <div className="divide-y divide-slate-50">
-              {students.map((s: Student) => (
+              {filteredStudents.map((s: Student) => (
                 <div key={s.id} className="flex items-center gap-4 px-5 py-3">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                     <GraduationCap className="w-4 h-4 text-slate-400" />
@@ -582,17 +663,37 @@ function UserManagementTab() {
       {/* Landlords */}
       {subTab === "landlords" && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900 text-sm">All landlords</h3>
-            <span className="text-xs text-slate-400">{landlords.length} total</span>
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-slate-900 text-sm flex-shrink-0">All landlords</h3>
+            <div className="flex items-center gap-3 flex-1 justify-end">
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={landlordSearch}
+                onChange={e => setLandlordSearch(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white w-56"
+              />
+              <span className="text-xs text-slate-400 flex-shrink-0">{filteredLandlords.length} total</span>
+            </div>
           </div>
           {landlordsLoading ? (
             <div className="p-4 space-y-3">
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
             </div>
+          ) : filteredLandlords.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-slate-400">
+                {landlordSearch.trim() ? `No landlords match "${landlordSearch}"` : "No landlords yet."}
+              </p>
+              {landlordSearch.trim() && (
+                <button onClick={() => setLandlordSearch("")} className="text-xs text-slate-400 hover:text-slate-600 underline mt-1">
+                  Clear search
+                </button>
+              )}
+            </div>
           ) : (
             <div className="divide-y divide-slate-50">
-              {landlords.map((l: Landlord) => (
+              {filteredLandlords.map((l: Landlord) => (
                 <div key={l.id} className="flex items-center gap-4 px-5 py-3">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                     <Home className="w-4 h-4 text-slate-400" />
@@ -641,17 +742,37 @@ function UserManagementTab() {
             </Button>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900 text-sm">All moderators</h3>
-              <span className="text-xs text-slate-400">{moderators.length} total</span>
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-slate-900 text-sm flex-shrink-0">All moderators</h3>
+              <div className="flex items-center gap-3 flex-1 justify-end">
+                <input
+                  type="text"
+                  placeholder="Search by email..."
+                  value={moderatorSearch}
+                  onChange={e => setModeratorSearch(e.target.value)}
+                  className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white w-56"
+                />
+                <span className="text-xs text-slate-400 flex-shrink-0">{filteredModerators.length} total</span>
+              </div>
             </div>
             {moderatorsLoading ? (
               <div className="p-4 space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
               </div>
+            ) : filteredModerators.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm text-slate-400">
+                  {moderatorSearch.trim() ? `No moderators match "${moderatorSearch}"` : "No moderators yet."}
+                </p>
+                {moderatorSearch.trim() && (
+                  <button onClick={() => setModeratorSearch("")} className="text-xs text-slate-400 hover:text-slate-600 underline mt-1">
+                    Clear search
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-slate-50">
-                {moderators.map((m: Moderator) => (
+                {filteredModerators.map((m: Moderator) => (
                   <div key={m.id} className="flex items-center gap-4 px-5 py-3">
                     <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center flex-shrink-0">
                       <ShieldCheck className="w-4 h-4 text-white" />
@@ -922,6 +1043,81 @@ function ReportDetailView({ reportId, onBack }: { reportId: number; onBack: () =
     </>
   );
 }
+function AccommodationReportGenerator({ onGenerate, generating }: { onGenerate: (id: number) => void; generating: boolean }) {
+  const [selectedId, setSelectedId] = useState<number | "">("");
+
+  const { data: universities = [] } = useQuery({
+    queryKey: ["admin-universities-tree"],
+    queryFn: () => adminApi.getUniversitiesTree().then(r => r.data),
+  });
+
+  const allAccommodations = (universities as UniversityTree[]).flatMap(u => u.accommodations);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <h3 className="font-semibold text-slate-900 text-sm mb-1">Accommodation report</h3>
+      <p className="text-xs text-slate-400 mb-4">Generate a report for a specific listing this month.</p>
+      <div className="flex gap-2">
+        <select
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value === "" ? "" : Number(e.target.value))}
+          className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white min-w-0"
+        >
+          <option value="">Select accommodation</option>
+          {allAccommodations.map(acc => (
+            <option key={acc.id} value={acc.id}>{acc.title}</option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2 flex-shrink-0"
+          disabled={generating || selectedId === ""}
+          onClick={() => selectedId !== "" && onGenerate(Number(selectedId))}
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Generate
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function UniversityReportGenerator({ onGenerate, generating }: { onGenerate: (id: number) => void; generating: boolean }) {
+  const [selectedId, setSelectedId] = useState<number | "">("");
+
+  const { data: universities = [] } = useQuery({
+    queryKey: ["admin-universities-tree"],
+    queryFn: () => adminApi.getUniversitiesTree().then(r => r.data),
+  });
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <h3 className="font-semibold text-slate-900 text-sm mb-1">University report</h3>
+      <p className="text-xs text-slate-400 mb-4">Generate a report for a specific university this month.</p>
+      <div className="flex gap-2">
+        <select
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value === "" ? "" : Number(e.target.value))}
+          className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white min-w-0"
+        >
+          <option value="">Select university</option>
+          {(universities as UniversityTree[]).map(u => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2 flex-shrink-0"
+          disabled={generating || selectedId === ""}
+          onClick={() => selectedId !== "" && onGenerate(Number(selectedId))}
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Generate
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function ReportsTab() {
   const queryClient = useQueryClient();
@@ -929,6 +1125,13 @@ function ReportsTab() {
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [filterType, setFilterType] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const TYPE_LABELS: Record<string, string> = {
+    platform_summary: "Platform Summary",
+    accommodation: "Accommodation",
+    university: "University",
+  };
 
   const { data: reports = [], isLoading } = useQuery<Report[]>({
     queryKey: ["admin-reports", filterType],
@@ -988,15 +1191,22 @@ function ReportsTab() {
     }
   };
 
+  const filteredReports = reports.filter(r => {
+  if (!searchQuery.trim()) return true;
+  const q = searchQuery.toLowerCase().trim();
+  return (
+    r.entity_name?.toLowerCase().includes(q) ||
+    MONTH_NAMES[r.period_month - 1].toLowerCase().includes(q) ||
+    String(r.period_year).includes(q) ||
+    TYPE_LABELS[r.report_type]?.toLowerCase().includes(q)
+  );
+});
+
   if (selectedReportId !== null) {
     return <ReportDetailView reportId={selectedReportId} onBack={() => setSelectedReportId(null)} />;
   }
 
-  const TYPE_LABELS: Record<string, string> = {
-    platform_summary: "Platform Summary",
-    accommodation: "Accommodation",
-    university: "University",
-  };
+  
 
   return (
     <div className="space-y-6">
@@ -1032,65 +1242,374 @@ function ReportsTab() {
             }
           </Button>
         </div>
+        
+      </div>
+
+      {/* Entity report generators */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <AccommodationReportGenerator onGenerate={handleGenerateAccommodation} generating={generating} />
+        <UniversityReportGenerator onGenerate={handleGenerateUniversity} generating={generating} />
       </div>
 
       {/* Reports table */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+          <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2 flex-shrink-0">
             <FileText className="w-4 h-4 text-slate-400" /> Report history
           </h3>
-          <span className="text-xs text-slate-400">{reports.length} reports</span>
+          <div className="flex items-center gap-3 flex-1 justify-end">
+            <input
+              type="text"
+              placeholder="Search by name, month, year..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white w-56"
+            />
+            <span className="text-xs text-slate-400 flex-shrink-0">{filteredReports.length} reports</span>
+          </div>
+        </div>
+
+        {isLoading ? (
+        <div className="p-4 space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+        </div>
+      ) : filteredReports.length === 0 ? (
+        <div className="px-5 py-12 text-center">
+          <FileText className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+          {searchQuery.trim() ? (
+            <>
+              <p className="text-sm text-slate-400">No reports match "{searchQuery}"</p>
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-xs text-slate-400 hover:text-slate-600 underline mt-2"
+              >
+                Clear search
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-400">No reports generated yet.</p>
+              <p className="text-xs text-slate-300 mt-1">Click "Generate platform report" to create the first one.</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-50">
+          {filteredReports.map((r: Report) => (
+            <div
+              key={r.id}
+              className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors"
+              onClick={() => setSelectedReportId(r.id)}
+            >
+              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800">
+                  {TYPE_LABELS[r.report_type] ?? r.report_type}
+                  {r.entity_name && ` — ${r.entity_name}`}
+                  {" "}· {MONTH_NAMES[r.period_month - 1]} {r.period_year}
+                </p>
+                <p className="text-xs text-slate-400">
+                  Generated {new Date(r.generated_at).toLocaleDateString("en-ZA", {
+                    day: "numeric", month: "short", year: "numeric"
+                  })}
+                </p>
+              </div>
+              <Badge className={`text-xs border rounded-full px-2 py-0.5 flex-shrink-0 ${
+                r.status === "complete"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : r.status === "generating"
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-red-50 text-red-700 border-red-200"
+              }`}>
+                {r.status}
+              </Badge>
+              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+            </div>
+          ))}
+        </div>
+      )}
+      </div>
+    </div>
+  );
+}
+
+const ACTION_CONFIG: Record<string, { label: string; color: string }> = {
+  approve_listing:                  { label: "Approved listing",       color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  reject_listing:                   { label: "Rejected listing",       color: "bg-red-50 text-red-700 border-red-200" },
+  remove_review:                    { label: "Removed review",         color: "bg-red-50 text-red-700 border-red-200" },
+  released:                         { label: "Released review",        color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  landlord_verified:                { label: "Verified landlord",      color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  landlord_verification_rejected:   { label: "Rejected verification",  color: "bg-red-50 text-red-700 border-red-200" },
+  appeal_upheld:                    { label: "Appeal upheld",          color: "bg-blue-50 text-blue-700 border-blue-200" },
+  appeal_dismissed:                 { label: "Appeal dismissed",       color: "bg-slate-100 text-slate-600 border-slate-200" },
+};
+
+function ModerationLogModal({ entry, onClose }: { entry: ModerationLogEntry; onClose: () => void }) {
+  const cfg = ACTION_CONFIG[entry.action] ?? { label: entry.action.replace(/_/g, " "), color: "bg-slate-100 text-slate-600 border-slate-200" };
+  const d = entry.resource_detail;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="rounded-2xl max-w-lg bg-white">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Badge className={`text-xs border rounded-full px-2 py-0.5 capitalize ${cfg.color}`}>
+              {cfg.label}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-400">
+            By {entry.moderator_email} · {new Date(entry.created_at).toLocaleDateString("en-ZA", {
+              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+            })}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+
+          {/* Accommodation detail */}
+          {entry.resource_type === "accommodation" && d.title && (
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Listing</p>
+              <p className="text-sm font-semibold text-slate-900">{d.title}</p>
+              {d.address && <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" />{d.address}</p>}
+              {d.landlord_name && (
+                <div className="pt-1 border-t border-slate-200">
+                  <p className="text-xs text-slate-400">Landlord</p>
+                  <p className="text-sm text-slate-700 font-medium">{d.landlord_name}</p>
+                  {d.landlord_phone && <p className="text-xs text-slate-400">{d.landlord_phone}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Review detail */}
+          {entry.resource_type === "review" && d.body && (
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Review</p>
+              {d.student_name && <p className="text-xs text-slate-500">By {d.student_name}</p>}
+              {d.rating && (
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map(i => (
+                    <Star key={i} className={`w-3.5 h-3.5 ${i <= (d.rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />
+                  ))}
+                </div>
+              )}
+              <p className="text-sm text-slate-700 leading-relaxed">{d.body}</p>
+              {d.status && (
+                <Badge className="text-xs bg-slate-100 text-slate-500 border-0 rounded-full capitalize">
+                  {d.status}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Landlord detail */}
+          {entry.resource_type === "landlord" && d.display_name && (
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Landlord</p>
+              <p className="text-sm font-semibold text-slate-900">{d.display_name}</p>
+              {d.verification_status && (
+                <Badge className={`text-xs border rounded-full capitalize ${
+                  d.verification_status === "verified" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                  d.verification_status === "rejected" ? "bg-red-50 text-red-700 border-red-200" :
+                  "bg-slate-100 text-slate-600 border-slate-200"
+                }`}>
+                  {d.verification_status}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Reason */}
+          {entry.reason && (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Reason / Notes</p>
+              <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3 leading-relaxed">
+                {entry.reason}
+              </p>
+            </div>
+          )}
+
+          {/* Resource reference */}
+          <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-100">
+            <span className="capitalize">{entry.resource_type} #{entry.resource_id}</span>
+            <span>Log entry #{entry.id}</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModerationTab() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [selectedEntry, setSelectedEntry] = useState<ModerationLogEntry | null>(null);
+
+  const { data, isLoading } = useQuery<ModerationLogResponse>({
+    queryKey: ["moderation-log", page],
+    queryFn: () => moderationApi.getModerationLog(page).then(r => r.data),
+  });
+
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / 20);
+
+  const filtered = items.filter(entry => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase().trim();
+    const d = entry.resource_detail;
+    return (
+      entry.moderator_email.toLowerCase().includes(q) ||
+      entry.action.replace(/_/g, " ").toLowerCase().includes(q) ||
+      entry.resource_type.toLowerCase().includes(q) ||
+      d.title?.toLowerCase().includes(q) ||
+      d.display_name?.toLowerCase().includes(q) ||
+      d.student_name?.toLowerCase().includes(q) ||
+      d.body?.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Moderation audit log</h2>
+          <p className="text-xs text-slate-400 mt-0.5">{total} total actions recorded</p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-xl gap-2"
+          onClick={() => window.open("/moderation", "_blank")}
+        >
+          <ShieldCheck className="w-4 h-4" /> Open moderation panel
+        </Button>
+      </div>
+
+      {/* Log table */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+          <h3 className="font-semibold text-slate-900 text-sm flex-shrink-0 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-slate-400" /> Activity
+          </h3>
+          <div className="flex items-center gap-3 flex-1 justify-end">
+            <input
+              type="text"
+              placeholder="Search by moderator, action, listing..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white w-64"
+            />
+            <span className="text-xs text-slate-400 flex-shrink-0">{filtered.length} shown</span>
+          </div>
         </div>
 
         {isLoading ? (
           <div className="p-4 space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
           </div>
-        ) : reports.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="px-5 py-12 text-center">
-            <FileText className="w-8 h-8 text-slate-200 mx-auto mb-3" />
-            <p className="text-sm text-slate-400">No reports generated yet.</p>
-            <p className="text-xs text-slate-300 mt-1">Click "Generate this month" to create the first report.</p>
+            <Activity className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+            <p className="text-sm text-slate-400">
+              {search.trim() ? `No entries match "${search}"` : "No moderation activity yet."}
+            </p>
+            {search.trim() && (
+              <button onClick={() => setSearch("")} className="text-xs text-slate-400 hover:text-slate-600 underline mt-1">
+                Clear search
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-50">
-            {reports.map((r: Report) => (
-              <div
-                key={r.id}
-                className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors"
-                onClick={() => setSelectedReportId(r.id)}
-              >
-                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800">
-                    {TYPE_LABELS[r.report_type] ?? r.report_type}
-                    {r.entity_name && ` — ${r.entity_name}`}
-                    {" "}· {MONTH_NAMES[r.period_month - 1]} {r.period_year}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    Generated {new Date(r.generated_at).toLocaleDateString("en-ZA", {
+            {filtered.map(entry => {
+              const cfg = ACTION_CONFIG[entry.action] ?? { label: entry.action.replace(/_/g, " "), color: "bg-slate-100 text-slate-600 border-slate-200" };
+              const d = entry.resource_detail;
+              const resourceName = d.title ?? d.display_name ?? d.student_name ?? `${entry.resource_type} #${entry.resource_id}`;
+
+              return (
+                <div
+                  key={entry.id}
+                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors"
+                  onClick={() => setSelectedEntry(entry)}
+                >
+                  {/* Moderator avatar */}
+                  <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-white">
+                      {entry.moderator_email[0].toUpperCase()}
+                    </span>
+                  </div>
+
+                  {/* Main info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-slate-800 truncate">
+                        {entry.moderator_email}
+                      </p>
+                      <Badge className={`text-xs border rounded-full px-2 py-0.5 flex-shrink-0 capitalize ${cfg.color}`}>
+                        {cfg.label}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      <span className="capitalize">{entry.resource_type}</span>
+                      {" · "}{resourceName}
+                      {entry.reason && <span className="text-slate-300"> · {entry.reason}</span>}
+                    </p>
+                  </div>
+
+                  {/* Timestamp */}
+                  <span className="text-xs text-slate-400 flex-shrink-0 hidden md:block">
+                    {new Date(entry.created_at).toLocaleDateString("en-ZA", {
                       day: "numeric", month: "short", year: "numeric"
                     })}
-                  </p>
+                  </span>
+
+                  <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                 </div>
-                <Badge className={`text-xs border rounded-full px-2 py-0.5 flex-shrink-0 ${
-                  r.status === "complete"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : r.status === "generating"
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-red-50 text-red-700 border-red-200"
-                }`}>
-                  {r.status}
-                </Badge>
-                <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && !search.trim() && (
+          <div className="flex items-center justify-center gap-2 px-5 py-4 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="rounded-xl gap-1.5"
+            >
+              <ChevronLeft className="w-4 h-4" /> Previous
+            </Button>
+            <span className="text-sm text-slate-500 px-3">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="rounded-xl gap-1.5"
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
         )}
       </div>
+
+      {/* Detail modal */}
+      {selectedEntry && (
+        <ModerationLogModal
+          entry={selectedEntry}
+          onClose={() => setSelectedEntry(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1162,18 +1681,7 @@ export default function AdminPage() {
         {activeTab === "overview" && <OverviewTab />}
         {activeTab === "universities" && <UniversitiesTab />}
         {activeTab === "users" && <UserManagementTab />}
-        {activeTab === "moderation" && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
-            <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 text-sm mb-4">Full moderation panel is available at the dedicated moderation page.</p>
-            <Button
-              onClick={() => router.push("/moderation")}
-              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl"
-            >
-              Go to moderation panel
-            </Button>
-          </div>
-        )}
+        {activeTab === "moderation" && <ModerationTab />}
         {activeTab === "reports" && <ReportsTab />}
       </div>
     </PageLayout>

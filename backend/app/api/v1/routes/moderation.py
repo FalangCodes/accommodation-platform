@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Optional
 
@@ -53,7 +54,7 @@ async def approve_listing(
     db.add(log)
     await db.commit()
     await cache_delete_pattern("search:*")
-    await cache_delete(key_listing(listing_id))
+    await cache_delete(key_listing(accommodation_id))
 
     return {"message": f"Listing {accommodation_id} approved successfully"}
 
@@ -176,25 +177,108 @@ async def get_pending_listings(
 
 @router.get("/log")
 async def get_moderation_log(
+    page: int = 1,
+    page_size: int = 20,
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
+    from app.models.student import Student
+    from app.models.accommodation import Accommodation
+    from app.models.landlord import Landlord
+
+    page = max(1, page)
+    page_size = min(max(1, page_size), 50)
+    offset = (page - 1) * page_size
+
+    # Total count
+    count_result = await db.execute(select(func.count(ModerationLog.id)))
+    total = count_result.scalar() or 0
+
+    # Paginated logs
     result = await db.execute(
-        select(ModerationLog).order_by(ModerationLog.created_at.desc())
+        select(ModerationLog)
+        .order_by(ModerationLog.created_at.desc())
+        .limit(page_size)
+        .offset(offset)
     )
     logs = result.scalars().all()
-    return [
-        {
-            "id": l.id,
-            "moderator_id": l.moderator_id,
-            "action": l.action,
-            "resource_type": l.resource_type,
-            "resource_id": l.resource_id,
-            "reason": l.reason,
-            "created_at": l.created_at,
-        }
-        for l in logs
-    ]
+
+    output = []
+    for log in logs:
+        # Moderator name
+        mod_result = await db.execute(select(User).where(User.id == log.moderator_id))
+        moderator = mod_result.scalar_one_or_none()
+
+        resource_detail = {}
+
+        if log.resource_type == "accommodation":
+            acc_result = await db.execute(
+                select(Accommodation).where(Accommodation.id == log.resource_id)
+            )
+            acc = acc_result.scalar_one_or_none()
+            if acc:
+                landlord_result = await db.execute(
+                    select(Landlord).where(Landlord.id == acc.landlord_id)
+                )
+                landlord = landlord_result.scalar_one_or_none()
+                resource_detail = {
+                    "title": acc.title,
+                    "address": acc.address,
+                    "landlord_name": landlord.display_name if landlord else None,
+                    "landlord_phone": landlord.contact_phone if landlord else None,
+                }
+
+        elif log.resource_type == "review":
+            review_result = await db.execute(
+                select(Review).where(Review.id == log.resource_id)
+            )
+            review = review_result.scalar_one_or_none()
+            if review:
+                student_result = await db.execute(
+                    select(Student).where(Student.id == review.student_id)
+                )
+                student = student_result.scalar_one_or_none()
+                student_user = None
+                if student:
+                    su_result = await db.execute(
+                        select(User).where(User.id == student.user_id)
+                    )
+                    student_user = su_result.scalar_one_or_none()
+                resource_detail = {
+                    "body": review.body,
+                    "rating": review.rating,
+                    "status": review.status,
+                    "student_name": f"{student.first_name} {student.last_name}".strip() if student and student.first_name else (student_user.email if student_user else None),
+                }
+
+        elif log.resource_type == "landlord":
+            landlord_result = await db.execute(
+                select(Landlord).where(Landlord.id == log.resource_id)
+            )
+            landlord = landlord_result.scalar_one_or_none()
+            if landlord:
+                resource_detail = {
+                    "display_name": landlord.display_name,
+                    "verification_status": landlord.verification_status,
+                }
+
+        output.append({
+            "id": log.id,
+            "moderator_email": moderator.email if moderator else f"User #{log.moderator_id}",
+            "action": log.action,
+            "resource_type": log.resource_type,
+            "resource_id": log.resource_id,
+            "reason": log.reason,
+            "created_at": log.created_at,
+            "resource_detail": resource_detail,
+        })
+
+    return {
+        "items": output,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 # ── APPEALS (admin only) ──────────────────────────────────────────────────────
