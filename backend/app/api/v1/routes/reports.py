@@ -15,6 +15,8 @@ from app.services.report_service import (
     generate_accommodation_report,
     generate_university_report,
 )
+from app.models.accommodation import Accommodation
+from app.models.university import University
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -63,8 +65,21 @@ async def list_reports(
     result = await db.execute(query)
     reports = result.scalars().all()
 
-    return [
-        {
+    output = []
+    for r in reports:
+        entity_name = None
+        if r.entity_id and r.entity_type == "accommodation":
+            acc_result = await db.execute(
+                select(Accommodation.title).where(Accommodation.id == r.entity_id)
+            )
+            entity_name = acc_result.scalar_one_or_none()
+        elif r.entity_id and r.entity_type == "university":
+            uni_result = await db.execute(
+                select(University.name).where(University.id == r.entity_id)
+            )
+            entity_name = uni_result.scalar_one_or_none()
+
+        output.append({
             "id": r.id,
             "report_type": r.report_type,
             "period_year": r.period_year,
@@ -73,9 +88,10 @@ async def list_reports(
             "status": r.status,
             "entity_id": r.entity_id,
             "entity_type": r.entity_type,
-        }
-        for r in reports
-    ]
+            "entity_name": entity_name,
+        })
+
+    return output
 
 
 @router.get("/{report_id}")
@@ -118,6 +134,7 @@ async def get_report(
         "status": report.status,
         "entity_id": report.entity_id,
         "entity_type": report.entity_type,
+        "entity_name": report.entity_name,  
         "metrics": grouped,
     }
 

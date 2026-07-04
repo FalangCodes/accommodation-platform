@@ -5,6 +5,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { reportsApi } from "@/lib/api";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { RefreshCw } from "lucide-react";
 import PageLayout from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +151,33 @@ export default function AdminAccommodationDetailPage() {
     }
   };
 
+  const { data: trendData = [], isLoading: trendLoading } = useQuery({
+  queryKey: ["accommodation-trend", id],
+  queryFn: () => reportsApi.getAccommodationTrend(Number(id)).then(r => r.data),
+  enabled: !!id,
+});
+
+const [generatingReport, setGeneratingReport] = useState(false);
+
+const handleGenerateReport = async () => {
+  const now = new Date();
+  setGeneratingReport(true);
+  try {
+    await reportsApi.generate({
+      report_type: "accommodation",
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      entity_id: Number(id),
+    });
+    toast.success("Accommodation report generated");
+    queryClient.invalidateQueries({ queryKey: ["accommodation-trend", id] }); // ← add this
+  } catch (err: any) {
+    toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+  } finally {
+    setGeneratingReport(false);
+  }
+};
+
   if (loading) {
     return (
       <PageLayout>
@@ -226,6 +256,8 @@ export default function AdminAccommodationDetailPage() {
                   <Eye className="w-3.5 h-3.5" />
                   View listing
                 </Button>
+
+                
                 {listing.status === "pending" && (
                   <>
                     <Button
@@ -374,7 +406,22 @@ export default function AdminAccommodationDetailPage() {
 
                 {/* Stats */}
                 <div className="bg-white border border-slate-200 rounded-2xl p-5">
-                  <h3 className="font-semibold text-slate-900 text-sm mb-4">Performance</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-slate-900 text-sm">Performance</h3>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl text-xs gap-1.5 h-7 px-2"
+                      onClick={handleGenerateReport}
+                      disabled={generatingReport}
+                    >
+                      {generatingReport
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <RefreshCw className="w-3 h-3" />
+                      }
+                      {generatingReport ? "Generating..." : "Generate report"}
+                    </Button>
+                  </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-500 flex items-center gap-2">
@@ -413,6 +460,59 @@ export default function AdminAccommodationDetailPage() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Trend chart */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                  <h3 className="font-semibold text-slate-900 text-sm mb-4 flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-slate-400" /> Views — last 6 months
+                  </h3>
+                  {trendLoading ? (
+                    <Skeleton className="h-36 w-full rounded-xl" />
+                  ) : trendData.length === 0 ? (
+                    <div className="h-36 flex items-center justify-center">
+                      <p className="text-xs text-slate-400 text-center">
+                        No trend data yet.<br />Generate a report to start tracking.
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={144}>
+                      <LineChart data={trendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <XAxis
+                          dataKey="month_label"
+                          tick={{ fontSize: 10, fill: "#94a3b8" }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: "#94a3b8" }}
+                          axisLine={false}
+                          tickLine={false}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "#1e293b",
+                            border: "none",
+                            borderRadius: "8px",
+                            fontSize: "12px",
+                            color: "#f8fafc",
+                          }}
+                          itemStyle={{ color: "#f8fafc" }}
+                          labelStyle={{ color: "#94a3b8", marginBottom: "2px" }}
+                          formatter={(value: number) => [value, "Views"]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="views"
+                          stroke="#1e293b"
+                          strokeWidth={2}
+                          dot={{ fill: "#1e293b", r: 3 }}
+                          activeDot={{ r: 5 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
 
                 {/* Landlord details */}

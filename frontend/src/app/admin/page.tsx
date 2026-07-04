@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
+import { reportsApi } from "@/lib/api";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { FileText, Download, RefreshCw, Calendar } from "lucide-react";
 import PageLayout from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +97,30 @@ interface Moderator {
   is_active: boolean;
   actions_count: number;
   joined: string;
+}
+
+interface Report {
+  id: number;
+  report_type: string;
+  period_year: number;
+  period_month: number;
+  generated_at: string;
+  status: string;
+  entity_id: number | null;
+  entity_type: string | null;
+  entity_name: string | null;
+}
+
+interface ReportDetail {
+  id: number;
+  report_type: string;
+  period_year: number;
+  period_month: number;
+  generated_at: string;
+  status: string;
+  entity_id: number | null;
+  entity_name?: string | null;
+  metrics: Record<string, { key: string; label: string; value: number; breakdown: Record<string, any> | null }[]>;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -687,12 +714,393 @@ function UserManagementTab() {
   );
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+const CATEGORY_ICONS: Record<string, any> = {
+  traffic: Eye,
+  users: Users,
+  listings: Building2,
+  reviews: Star,
+  nlp: TrendingUp,
+  verification: ShieldCheck,
+  moderation: Activity,
+};
+
+function MetricCard({ label, value, breakdown }: { label: string; value: number; breakdown?: Record<string, any> | null }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <p className="text-xs text-slate-400 mb-1">{label}</p>
+      <p className="text-xl font-bold text-slate-900">{typeof value === "number" ? value.toLocaleString() : value}</p>
+      {breakdown && Object.keys(breakdown).length > 0 && (
+        <div className="mt-2 space-y-1">
+          {Object.entries(breakdown).filter(([k]) => !["accommodation_id", "title"].includes(k)).map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between">
+              <span className="text-xs text-slate-400 capitalize">{k.replace(/_/g, " ")}</span>
+              <span className="text-xs font-semibold text-slate-700">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportDetailView({ reportId, onBack }: { reportId: number; onBack: () => void }) {
+  const { data: report, isLoading } = useQuery<ReportDetail>({
+    queryKey: ["admin-report", reportId],
+    queryFn: () => reportsApi.get(reportId).then(r => r.data),
+  });
+
+   const { data: trendData = [] } = useQuery({
+  queryKey: ["accommodation-trend", report?.entity_id],
+  queryFn: () => reportsApi.getAccommodationTrend(report!.entity_id!).then(r => r.data),
+  enabled: !!report && report.report_type === "accommodation" && !!report.entity_id,
+});
+
+  if (isLoading) return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48 rounded-xl" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+      </div>
+    </div>
+  );
+
+  if (!report) return null;
+
+  const periodLabel = `${MONTH_NAMES[report.period_month - 1]} ${report.period_year}`;
+
+
+
+  return (
+    <>
+      {/* Print styles injected inline */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 20mm 15mm;
+          }
+          body * { visibility: hidden !important; }
+          #report-print-area, #report-print-area * { visibility: visible !important; }
+          #report-print-area {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 0;
+          }
+          .no-print { display: none !important; }
+          #report-print-area .bg-white {
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+            margin-bottom: 16px !important;
+            page-break-inside: avoid;
+          }
+          #report-print-area h2 {
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            color: #0f172a !important;
+          }
+          #report-print-area h3 {
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: #0f172a !important;
+            margin-bottom: 8px !important;
+          }
+          #report-print-area p, #report-print-area span {
+            color: #334155 !important;
+          }
+          #report-print-area .grid {
+            display: grid !important;
+          }
+          #report-print-area .text-xl {
+            font-size: 20px !important;
+            font-weight: 700 !important;
+          }
+        }
+      `}</style>
+
+      <div className="space-y-6">
+        {/* Toolbar — hidden on print */}
+        <div className="flex items-center justify-between no-print">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4 rotate-180" /> Back to reports
+          </button>
+          <Button
+            size="sm"
+            className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2"
+            onClick={() => window.print()}
+          >
+            <Download className="w-4 h-4" /> Print / Export PDF
+          </Button>
+        </div>
+
+        {/* Report content — this is what prints */}
+        <div id="report-print-area" className="space-y-8">
+          {/* Header */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">AccomFind Platform Report</p>
+                <h2 className="text-xl font-bold text-slate-900 capitalize">
+                  {report.report_type.replace(/_/g, " ")}
+                  {report.entity_name && (
+                    <span className="text-slate-500 font-normal"> — {report.entity_name}</span>
+                  )}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" /> {periodLabel}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-400">Generated</p>
+                <p className="text-sm font-medium text-slate-700">
+                  {new Date(report.generated_at).toLocaleDateString("en-ZA", {
+                    day: "numeric", month: "long", year: "numeric"
+                  })}
+                </p>
+                <Badge className="mt-1 text-xs bg-emerald-50 text-emerald-700 border-0 rounded-full">
+                  {report.status}
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Metric categories */}
+          {Object.entries(report.metrics).map(([category, metrics]) => {
+            const Icon = CATEGORY_ICONS[category] ?? FileText;
+            return (
+              <div key={category} className="space-y-3">
+                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2 capitalize">
+                  <Icon className="w-4 h-4 text-slate-400" />
+                  {category.replace(/_/g, " ")}
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {metrics.map(m => (
+                    <MetricCard key={m.key} label={m.label} value={m.value} breakdown={m.breakdown} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {/* Trend chart — only for accommodation reports */}
+          {report.report_type === "accommodation" && report.entity_id && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5">
+              <h3 className="font-semibold text-slate-900 text-sm mb-4 flex items-center gap-2">
+                <Eye className="w-4 h-4 text-slate-400" /> Views — last 6 months
+              </h3>
+              {trendData.length === 0 ? (
+                <div className="h-36 flex items-center justify-center">
+                  <p className="text-xs text-slate-400 text-center">
+                    No trend data yet — generate more monthly reports to build history.
+                  </p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={144}>
+                  <LineChart data={trendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="month_label" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ background: "#1e293b", border: "none", borderRadius: "8px", fontSize: "12px", color: "#f8fafc" }}
+                      formatter={(value: number) => [value, "Views"]}
+                    />
+                    <Line type="monotone" dataKey="views" stroke="#1e293b" strokeWidth={2} dot={{ fill: "#1e293b", r: 3 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsTab() {
+  const queryClient = useQueryClient();
+  const now = new Date();
+  const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [filterType, setFilterType] = useState<string>("all");
+
+  const { data: reports = [], isLoading } = useQuery<Report[]>({
+    queryKey: ["admin-reports", filterType],
+    queryFn: () => reportsApi.list(filterType !== "all" ? { report_type: filterType } : undefined).then(r => r.data),
+  });
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await reportsApi.generate({
+        report_type: "platform_summary",
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+      });
+      toast.success("Platform summary report generated");
+      queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGenerateAccommodation = async (accommodationId: number) => {
+  setGenerating(true);
+  try {
+    await reportsApi.generate({
+      report_type: "accommodation",
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      entity_id: accommodationId,
+    });
+    toast.success("Accommodation report generated");
+    queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
+  } catch (err: any) {
+    toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+  } finally {
+    setGenerating(false);
+  }
+};
+
+  const handleGenerateUniversity = async (universityId: number) => {
+    setGenerating(true);
+    try {
+      await reportsApi.generate({
+        report_type: "university",
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        entity_id: universityId,
+      });
+      toast.success("University report generated");
+      queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (selectedReportId !== null) {
+    return <ReportDetailView reportId={selectedReportId} onBack={() => setSelectedReportId(null)} />;
+  }
+
+  const TYPE_LABELS: Record<string, string> = {
+    platform_summary: "Platform Summary",
+    accommodation: "Accommodation",
+    university: "University",
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Actions bar */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Platform reports</h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Current period: {MONTH_NAMES[now.getMonth()]} {now.getFullYear()}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <select
+            value={filterType}
+            onChange={e => setFilterType(e.target.value)}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
+          >
+            <option value="all">All types</option>
+            <option value="platform_summary">Platform summary</option>
+            <option value="accommodation">Accommodation</option>
+            <option value="university">University</option>
+          </select>
+
+          <Button
+            size="sm"
+            className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2"
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+              : <><RefreshCw className="w-4 h-4" /> Generate platform report</>
+            }
+          </Button>
+        </div>
+      </div>
+
+      {/* Reports table */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-400" /> Report history
+          </h3>
+          <span className="text-xs text-slate-400">{reports.length} reports</span>
+        </div>
+
+        {isLoading ? (
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+          </div>
+        ) : reports.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <FileText className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+            <p className="text-sm text-slate-400">No reports generated yet.</p>
+            <p className="text-xs text-slate-300 mt-1">Click "Generate this month" to create the first report.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {reports.map((r: Report) => (
+              <div
+                key={r.id}
+                className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors"
+                onClick={() => setSelectedReportId(r.id)}
+              >
+                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-4 h-4 text-slate-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800">
+                    {TYPE_LABELS[r.report_type] ?? r.report_type}
+                    {r.entity_name && ` — ${r.entity_name}`}
+                    {" "}· {MONTH_NAMES[r.period_month - 1]} {r.period_year}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Generated {new Date(r.generated_at).toLocaleDateString("en-ZA", {
+                      day: "numeric", month: "short", year: "numeric"
+                    })}
+                  </p>
+                </div>
+                <Badge className={`text-xs border rounded-full px-2 py-0.5 flex-shrink-0 ${
+                  r.status === "complete"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : r.status === "generating"
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-red-50 text-red-700 border-red-200"
+                }`}>
+                  {r.status}
+                </Badge>
+                <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const { user, loading, isAdmin } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "universities" | "users" | "moderation">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "universities" | "users" | "moderation" | "reports">("overview");
 
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/admin");
@@ -716,6 +1124,7 @@ export default function AdminPage() {
     { id: "universities", label: "Universities", icon: Building2 },
     { id: "users", label: "User management", icon: Users },
     { id: "moderation", label: "Moderation", icon: ShieldCheck },
+    { id: "reports", label: "Reports", icon: FileText },
   ] as const;
 
   return (
@@ -765,6 +1174,7 @@ export default function AdminPage() {
             </Button>
           </div>
         )}
+        {activeTab === "reports" && <ReportsTab />}
       </div>
     </PageLayout>
   );
