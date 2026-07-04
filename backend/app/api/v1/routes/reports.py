@@ -125,6 +125,19 @@ async def get_report(
             "breakdown": m.breakdown,
         })
 
+    # Resolve entity name
+    entity_name = None
+    if report.entity_id and report.entity_type == "accommodation":
+        acc_result = await db.execute(
+            select(Accommodation.title).where(Accommodation.id == report.entity_id)
+        )
+        entity_name = acc_result.scalar_one_or_none()
+    elif report.entity_id and report.entity_type == "university":
+        uni_result = await db.execute(
+            select(University.name).where(University.id == report.entity_id)
+        )
+        entity_name = uni_result.scalar_one_or_none()
+
     return {
         "id": report.id,
         "report_type": report.report_type,
@@ -134,7 +147,7 @@ async def get_report(
         "status": report.status,
         "entity_id": report.entity_id,
         "entity_type": report.entity_type,
-        "entity_name": report.entity_name,  
+        "entity_name": entity_name,
         "metrics": grouped,
     }
 
