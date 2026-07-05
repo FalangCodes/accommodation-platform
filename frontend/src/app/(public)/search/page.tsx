@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
+
 // Leaflet must be dynamically imported (no SSR)
 const SearchMap = dynamic(() => import("@/components/search-map"), {
   ssr: false,
@@ -211,11 +212,11 @@ function ListingCard({
         )}
 
         {/* Distance badge */}
-        {item.distance_km !== undefined && item.distance_km !== null && item.distance_km > 0 && (
+        {item.distance_km !== undefined && item.distance_km !== null && Number(item.distance_km) > 0 && (
           <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-xs font-medium text-slate-700 px-2.5 py-1 rounded-full border border-white/60 shadow-sm">
-            {item.distance_km < 1
-              ? `${Math.round(item.distance_km * 1000)}m away`
-              : `${item.distance_km.toFixed(1)}km away`}
+            {Number(item.distance_km) < 1
+              ? `${Math.round(Number(item.distance_km) * 1000)}m away`
+              : `${Number(item.distance_km).toFixed(1)}km away`}
           </div>
         )}
 
@@ -486,7 +487,7 @@ function FilterBar({
               {[
                 { value: undefined, label: "Any" },
                 { value: "self_funded", label: "Self-funded" },
-                { value: "bursary", label: "Bursary" },
+                { value: "bursary", label: "Bursary/NSFAS" },
               ].map((opt) => (
                 <button
                   key={opt.label}
@@ -528,6 +529,7 @@ function SearchPageInner() {
   const { user, isStudent, isLandlord } = useAuth();
   const isGuest = !user;
 
+
   // Initialise filters from URL query params
   const [filters, setFilters] = useState<Filters>({
     university_id: searchParams.get("university_id")
@@ -553,7 +555,9 @@ function SearchPageInner() {
     gender_policy: (searchParams.get("gender_policy") as "male" | "female") ?? undefined,
     funding_type: (searchParams.get("funding_type") as "self_funded" | "bursary") ?? undefined,
   });
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(
+    Number(searchParams.get("page") ?? 1)
+  );
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
 
   const currentUrl =
@@ -565,6 +569,13 @@ function SearchPageInner() {
     queryFn: fetchUniversities,
     staleTime: Infinity,
   });
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", String(newPage));
+    router.replace(`/search?${params.toString()}`, { scroll: false });
+  };
 
   // ── Accommodations ──
   const {
@@ -584,6 +595,10 @@ function SearchPageInner() {
       router.push(`/login?redirect=${encodeURIComponent(currentUrl)}`);
     }
   }, [isGuest, page]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [page]);
 
   const items = results?.items ?? [];
   const total = results?.total ?? 0;
@@ -765,7 +780,7 @@ function SearchPageInner() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => handlePageChange(Math.max(1, page - 1))}
                       disabled={page === 1}
                       className="rounded-xl gap-1.5"
                     >
@@ -786,7 +801,7 @@ function SearchPageInner() {
                                 );
                                 return;
                               }
-                              setPage(pageNum);
+                              handlePageChange(pageNum);
                             }}
                             className={`w-9 h-9 rounded-lg text-sm font-medium transition-all ${
                               page === pageNum
@@ -816,7 +831,7 @@ function SearchPageInner() {
                           );
                           return;
                         }
-                        setPage((p) => Math.min(totalPages, p + 1));
+                        handlePageChange(Math.min(totalPages, page + 1));
                       }}
                       disabled={page === totalPages}
                       className="rounded-xl gap-1.5"

@@ -85,7 +85,7 @@ export default function Navbar() {
                     </Avatar>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52 mt-1">
+                <DropdownMenuContent align="end" className="w-52 mt-1 bg-white border border-gray-200 shadow-lg">
                   <div className="px-3 py-2 border-b border-gray-100">
                     <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">
                       Signed in as

@@ -140,6 +140,9 @@ export const moderationApi = {
 
   removeReview: (id: number, reason: string) =>
     api.delete(`/api/v1/moderation/reviews/${id}`, { data: { reason } }),
+
+  getModerationLog: (page: number = 1) =>
+  api.get("/api/v1/moderation/log", { params: { page, page_size: 20 } }),
 };
 
 // ── UNIVERSITIES ──────────────────────────────────────────────────────────────

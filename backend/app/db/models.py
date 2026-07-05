@@ -9,3 +9,4 @@ from app.models.accommodation import Accommodation, AccommodationView, Accommoda
 from app.models.review import Review, ReviewNLPResult, ReviewReply
 from app.models.moderation import ModerationLog, ModerationQueue, Appeal
 from app.models.report import MonthlyReport, ReportMetric
+from app.models.insight import AccommodationInsight
