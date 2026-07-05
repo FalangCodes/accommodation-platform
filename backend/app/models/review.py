@@ -37,12 +37,13 @@ class ReviewNLPResult(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     review_id = Column(Integer, ForeignKey("reviews.id", ondelete="CASCADE"), unique=True, nullable=False)
-    
-    sentiment = Column(String, nullable=False) # positive/neutral/negative
+
+    sentiment = Column(String, nullable=False)
     sentiment_score = Column(Float, nullable=False)
     aspects = Column(JSONB, nullable=False)
+    aspect_details = Column(JSONB, nullable=True)  # ← add this
     spam_flag = Column(Boolean, default=False)
-    
+
     analysed_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class ReviewReply(Base):
