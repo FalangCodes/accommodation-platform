@@ -1,11 +1,12 @@
 from app.db.base import AsyncSessionLocal
 from app.models.review import Review, ReviewNLPResult
 from app.services.nlp_service import analyse_review
+from app.services.insight_engine import extract_aspect_details, regenerate_accommodation_insights
 from sqlalchemy.future import select
 
 
 async def process_review_nlp(review_id: int, review_text: str, db=None):
-    """Background task: call NLP service and store results."""
+    """Background task: call NLP service, extract aspect details, regenerate insights."""
     result = await analyse_review(review_id, review_text)
 
     if not result:
@@ -14,34 +15,43 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
 
     async with AsyncSessionLocal() as session:
         try:
-            # Fetch the review
             review_result = await session.execute(
                 select(Review).where(Review.id == review_id)
             )
             review = review_result.scalar_one_or_none()
             if not review:
-                print(f"Review {review_id} not found")
                 return
 
-            # Save NLP result
+            # Extract aspect-level details using insight engine
+            aspect_details = await extract_aspect_details(
+                aspects=result.get("aspects", {}),
+                sentences=result.get("sentences", []),
+                overall_sentiment=result.get("sentiment", "neutral")
+            )
+
+            # Save enriched NLP result
             nlp_record = ReviewNLPResult(
                 review_id=review_id,
                 sentiment=result["sentiment"],
                 sentiment_score=result["sentiment_score"],
                 aspects=result["aspects"],
+                aspect_details=aspect_details,  # ← new
                 spam_flag=result["is_toxic"],
             )
             session.add(nlp_record)
 
-            # Set status based on toxicity
+            # Set review status
             if result["is_toxic"]:
                 review.status = "quarantined"
-                print(f"Review {review_id} quarantined — toxic content detected")
             else:
                 review.status = "analysed"
-                print(f"Review {review_id} analysed — sentiment: {result['sentiment']}")
 
             await session.commit()
+            print(f"NLP complete for review {review_id}")
+
+            # Regenerate accommodation insights
+            await regenerate_accommodation_insights(review.accommodation_id, session)
+
         except Exception as e:
             await session.rollback()
-            print(f"Failed to save NLP results for review {review_id}: {e}")
+            print(f"Failed to process review {review_id}: {e}")

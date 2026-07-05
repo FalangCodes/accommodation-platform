@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.landlord import Landlord
 from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
 from app.models.university import University
+from app.models.insight import AccommodationInsight
 from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
 from app.services.storage_service import upload_image, delete_image
@@ -652,3 +653,26 @@ async def upload_ownership_document(
     await db.commit()
 
     return {"detail": "Ownership document uploaded", "url": blob_url}
+
+@router.get("/{accommodation_id}/insights")
+async def get_accommodation_insights(
+    accommodation_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Public endpoint — returns student-filtered insights + landlord full view based on auth."""
+    result = await db.execute(
+        select(AccommodationInsight).where(
+            AccommodationInsight.accommodation_id == accommodation_id
+        )
+    )
+    insight = result.scalar_one_or_none()
+
+    if not insight:
+        return {"insights": {}, "recommendations": [], "review_count": 0}
+
+    return {
+        "insights": insight.insights,
+        "recommendations": insight.recommendations,
+        "review_count": insight.review_count,
+        "generated_at": insight.generated_at,
+    }
