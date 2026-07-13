@@ -573,6 +573,11 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
     queryFn: () => fetchAnalytics(listing.id),
   });
 
+  const { data: insights } = useQuery({
+  queryKey: ["listing-insights", listing.id],
+  queryFn: () => api.get(`/api/v1/accommodations/${listing.id}/insights`).then(r => r.data),
+});
+
   return (
     <div className="space-y-6">
       <button
@@ -637,33 +642,126 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
             </div>
           </div>
 
-          {/* Aspect scores */}
-          {Object.keys(analytics.top_aspects).length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5">
-              <h3 className="font-semibold text-slate-900 text-sm mb-4">Aspect scores</h3>
-              <div className="space-y-3">
-                {Object.entries(analytics.top_aspects).map(([aspect, score]) => {
-                    const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
-                    const pct = Math.round(score * 100);
-                    const frequency =
-                        pct >= 70 ? { label: "Frequently mentioned", text: "text-emerald-700", bg: "bg-emerald-50" } :
-                        pct >= 40 ? { label: "Sometimes mentioned",  text: "text-amber-700",   bg: "bg-amber-50"   } :
-                                    { label: "Rarely mentioned",      text: "text-slate-500",   bg: "bg-slate-100"  };
-                    return (
-                        <div key={aspect} className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-1.5 w-32 flex-shrink-0">
-                            <Icon className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="text-xs text-slate-600 font-medium">{ASPECT_LABELS[aspect] ?? aspect}</span>
-                        </div>
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${frequency.bg} ${frequency.text}`}>
-                            {frequency.label}
-                        </span>
-                        </div>
-                    );
-                    })}
+          {/* Insight Engine Panel */}
+{insights && Object.keys(insights.insights ?? {}).length > 0 && (
+  <div className="bg-white border border-slate-200 rounded-2xl p-5">
+    <div className="flex items-center gap-2 mb-4">
+      <TrendingUp className="w-4 h-4 text-slate-400" />
+      <h3 className="font-semibold text-slate-900 text-sm">Accommodation Insight Engine</h3>
+      <span className="text-xs text-slate-400 ml-auto">
+        Based on {insights.review_count} review{insights.review_count !== 1 ? "s" : ""}
+      </span>
+    </div>
+
+    {/* Aspect breakdown */}
+    <div className="space-y-3 mb-6">
+      {Object.entries(insights.insights).map(([aspect, data]: [string, any]) => {
+        const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
+        const sentimentConfig = {
+          positive: { bar: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", label: "Positive" },
+          negative: { bar: "bg-red-400", text: "text-red-700", bg: "bg-red-50", label: "Negative" },
+          mixed:    { bar: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50", label: "Mixed" },
+        }[data.overall_sentiment as string] ?? { bar: "bg-slate-300", text: "text-slate-500", bg: "bg-slate-50", label: "Unknown" };
+
+        return (
+          <div key={aspect} className="border border-slate-100 rounded-xl p-3">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Icon className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs font-semibold text-slate-700">{data.display_name}</span>
+                {!data.show_to_students && (
+                  <span className="text-xs bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full">
+                    Hidden from students
+                  </span>
+                )}
               </div>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sentimentConfig.bg} ${sentimentConfig.text}`}>
+                {sentimentConfig.label}
+              </span>
             </div>
-          )}
+
+            {/* Positive rate bar */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${sentimentConfig.bar}`}
+                  style={{ width: `${data.positive_rate}%` }}
+                />
+              </div>
+              <span className="text-xs text-slate-500 w-24 text-right flex-shrink-0">
+                {data.positive_rate}% positive · {data.mention_count} mentions
+              </span>
+            </div>
+
+            {/* Evidence */}
+            {data.top_strengths.length > 0 && (
+              <div className="space-y-1 mb-1">
+                {data.top_strengths.slice(0, 2).map((s: string, i: number) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <span className="text-emerald-500 text-xs flex-shrink-0 mt-0.5">✓</span>
+                    <span className="text-xs text-slate-600 leading-relaxed">{s}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {data.top_concerns.length > 0 && (
+              <div className="space-y-1">
+                {data.top_concerns.slice(0, 2).map((c: string, i: number) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <span className="text-red-400 text-xs flex-shrink-0 mt-0.5">✗</span>
+                    <span className="text-xs text-slate-600 leading-relaxed">{c}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+
+    {/* Recommendations */}
+    {insights.recommendations.length > 0 && (
+      <div>
+        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+          Recommendations
+        </h4>
+        <div className="space-y-3">
+          {insights.recommendations.map((rec: any, i: number) => (
+            <div
+              key={i}
+              className={`rounded-xl p-3 border ${
+                rec.priority === "high"
+                  ? "bg-red-50 border-red-200"
+                  : "bg-amber-50 border-amber-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`text-xs font-semibold ${
+                  rec.priority === "high" ? "text-red-700" : "text-amber-700"
+                }`}>
+                  {rec.priority === "high" ? "⚠️ High priority" : "⚡ Medium priority"} · {rec.display_name}
+                </span>
+                <span className="text-xs text-slate-400 ml-auto">
+                  {rec.positive_rate}% positive · {rec.mention_count} mentions
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed">{rec.recommendation}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {insights.recommendations.length === 0 && (
+      <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+        <p className="text-xs text-emerald-700 font-medium">
+          ✓ No critical issues identified. Students are generally satisfied with this property.
+        </p>
+      </div>
+    )}
+  </div>
+)}
         </>
       )}
     </div>

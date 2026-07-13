@@ -4,13 +4,6 @@ from pydantic import BaseModel
 from transformers import pipeline
 import re
 
-class SentenceScoreRequest(BaseModel):
-    sentence: str
-    aspect: str
-
-class SentimentRequest(BaseModel):
-    text: str
-
 ml_models = {}
 
 ASPECT_LABELS = [
@@ -23,28 +16,6 @@ ASPECT_LABELS = [
     "maintenance and repairs",
     "value for money"
 ]
-
-
-def split_to_clauses(text: str) -> list[str]:
-    """Split review text into clauses handling multi-aspect sentences."""
-    # First split by sentence endings
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-    clauses = []
-    for sentence in sentences:
-        # Split on contrast/conjunction markers
-        parts = re.split(
-            r'\s+(?:but|however|although|yet|while|though|whereas|except|despite|still|nevertheless)\s+',
-            sentence,
-            flags=re.IGNORECASE
-        )
-        for part in parts:
-            part = part.strip().rstrip('.,!?')
-            if len(part.split()) >= 4:
-                clauses.append(part)
-            elif clauses:
-                # Too short to stand alone — append to previous clause
-                clauses[-1] = clauses[-1] + '. ' + part
-    return [c for c in clauses if c]
 
 
 @asynccontextmanager
@@ -134,28 +105,4 @@ async def analyze_review(request: ReviewRequest):
         "is_toxic": is_toxic,
         "toxicity_score": toxicity_score,
         "aspects": aspects,
-        "sentences": clauses,  # ← new field
-    }
-
-@app.post("/score_sentence")
-async def score_sentence(request: SentenceScoreRequest):
-    """Score relevance of a sentence to an aspect using zero-shot classification."""
-    if not request.sentence.strip():
-        return {"score": 0.0}
-    result = ml_models["aspects"](
-        request.sentence,
-        [request.aspect],
-        multi_label=False
-    )
-    return {"score": round(float(result["scores"][0]), 4)}
-
-@app.post("/sentiment")
-async def get_sentiment(request: SentimentRequest):
-    """Get sentiment for a short piece of text."""
-    if not request.text.strip():
-        return {"sentiment": "neutral", "score": 0.0}
-    result = ml_models["sentiment"](request.text[:512])[0]
-    return {
-        "sentiment": result["label"].lower(),
-        "score": round(float(result["score"]), 4)
     }

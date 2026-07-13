@@ -58,6 +58,27 @@ interface ListingDetail {
   property_type?: string | null;
   website?: string | null;
   amenities?: string[] | null;
+  insights: Record<string, {
+    display_name: string;
+    mention_count: number;
+    positive_rate: number;
+    negative_rate: number;
+    overall_sentiment: string;
+    student_sentiment: string;
+    show_to_students: boolean;
+    top_strengths: string[];
+    top_concerns: string[];
+  }>;
+  recommendations: {
+    aspect: string;
+    display_name: string;
+    priority: string;
+    recommendation: string;
+    positive_rate: number;
+    mention_count: number;
+  }[];
+  review_count: number;
+  generated_at: string;
 }
 
 interface Review {
@@ -333,23 +354,64 @@ function StarRating({ rating, size = "md" }: { rating: number; size?: "sm" | "md
   );
 }
 
-function AspectBar({ label, score, icon: Icon }: { label: string; score: number; icon: any }) {
-  const pct = Math.round(score * 100);
-  
-  const frequency =
-    pct >= 70 ? { label: "Frequently mentioned", color: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" } :
-    pct >= 40 ? { label: "Sometimes mentioned",  color: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50"   } :
-                { label: "Rarely mentioned",      color: "bg-slate-300",   text: "text-slate-500",   bg: "bg-slate-100"  };
+function AspectInsightCard({
+  displayName,
+  icon: Icon,
+  studentSentiment,
+  positiveRate,
+  topStrengths,
+  topConcerns,
+  mentionCount,
+}: {
+  displayName: string;
+  icon: any;
+  studentSentiment: "positive" | "negative" | "mixed";
+  positiveRate: number;
+  topStrengths: string[];
+  topConcerns: string[];
+  mentionCount: number;
+}) {
+  const config = {
+    positive: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", label: "Positive", dot: "bg-emerald-500" },
+    negative: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700", label: "Negative", dot: "bg-red-500" },
+    mixed:    { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", label: "Mixed", dot: "bg-amber-400" },
+  }[studentSentiment];
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-1.5 w-28 flex-shrink-0">
-        <Icon className="w-3.5 h-3.5 text-slate-400" />
-        <span className="text-xs text-slate-600 font-medium">{label}</span>
+    <div className={`rounded-xl border p-3 ${config.bg} ${config.border}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Icon className="w-3.5 h-3.5 text-slate-500" />
+          <span className="text-xs font-semibold text-slate-700">{displayName}</span>
+        </div>
+        <span className={`text-xs font-medium ${config.text}`}>
+          {config.label}
+        </span>
       </div>
-      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${frequency.bg} ${frequency.text}`}>
-        {frequency.label}
-      </span>
+
+      {topStrengths.length > 0 && (
+        <div className="space-y-1 mb-1.5">
+          {topStrengths.slice(0, 1).map((s, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <span className="text-emerald-500 text-xs mt-0.5 flex-shrink-0">✓</span>
+              <span className="text-xs text-slate-600 leading-relaxed line-clamp-2">{s}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {topConcerns.length > 0 && (
+        <div className="space-y-1">
+          {topConcerns.slice(0, 1).map((c, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <span className="text-red-400 text-xs mt-0.5 flex-shrink-0">✗</span>
+              <span className="text-xs text-slate-600 leading-relaxed line-clamp-2">{c}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-slate-400 mt-2">{mentionCount} student{mentionCount !== 1 ? "s" : ""} mentioned this</p>
     </div>
   );
 }
@@ -473,6 +535,15 @@ export default function ListingDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["listing", id] });
     toast.success("Review submitted! AI analysis is running in the background.");
   };
+
+  const { data: insights } = useQuery({
+    queryKey: ["listing-insights", id],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/v1/accommodations/${id}/insights`);
+      return data;
+    },
+    enabled: !!id,
+  });
 
   // Fire view once on mount
   useEffect(() => {
@@ -780,25 +851,56 @@ export default function ListingDetailPage() {
                         <div className="relative">
                           {!isGuest && (
                             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-                              Aspect Breakdown
+                              Aspect Insights
                             </h4>
                           )}
-                          <div className={`space-y-2.5 ${isGuest ? "blur-sm select-none" : ""}`}>
-                            {Object.entries(listing.top_aspects).map(([aspect, score]) => {
-                              const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
-                              return (
-                                <AspectBar key={aspect} label={ASPECT_LABELS[aspect] ?? aspect} score={score} icon={Icon} />
-                              );
-                            })}
-                          </div>
-                          {isGuest && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                              <Lock className="w-5 h-5 text-slate-400 mb-1.5" />
-                              <p className="text-xs text-slate-500 font-medium text-center">Sign in to see full breakdown</p>
-                              <Link href={`/login?redirect=/listings/${id}`} className="text-xs text-blue-600 hover:underline mt-1">
-                                Sign in free
-                              </Link>
+
+                          {/* Guest blur overlay */}
+                          {isGuest ? (
+                            <div className="relative">
+                              <div className="space-y-2 blur-sm select-none pointer-events-none">
+                                {/* Placeholder cards for guests */}
+                                {["WiFi & Internet", "Safety", "Cleanliness"].map((label) => (
+                                  <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3 h-20" />
+                                ))}
+                              </div>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <Lock className="w-5 h-5 text-slate-400 mb-1.5" />
+                                <p className="text-xs text-slate-500 font-medium text-center">Sign in to see full breakdown</p>
+                                <Link href={`/login?redirect=/listings/${id}`} className="text-xs text-blue-600 hover:underline mt-1">
+                                  Sign in free
+                                </Link>
+                              </div>
                             </div>
+                          ) : insights && Object.keys(insights.insights ?? {}).length > 0 ? (
+                            <div className="space-y-2">
+                              {Object.entries(insights.insights)
+                                .filter(([, data]: [string, any]) => data.show_to_students)
+                                .map(([aspect, data]: [string, any]) => {
+                                  const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
+                                  return (
+                                    <AspectInsightCard
+                                      key={aspect}
+                                      displayName={data.display_name}
+                                      icon={Icon}
+                                      studentSentiment={data.student_sentiment}
+                                      positiveRate={data.positive_rate}
+                                      topStrengths={data.top_strengths}
+                                      topConcerns={data.top_concerns}
+                                      mentionCount={data.mention_count}
+                                    />
+                                  );
+                                })}
+                              {Object.entries(insights.insights).filter(([, data]: [string, any]) => data.show_to_students).length === 0 && (
+                                <p className="text-xs text-slate-400 text-center py-3">
+                                  Not enough reviews yet to generate insights. Check back soon.
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 text-center py-3">
+                              No insights available yet.
+                            </p>
                           )}
                         </div>
                       </>
