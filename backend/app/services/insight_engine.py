@@ -347,10 +347,6 @@ def extract_aspect_details(
     overall_sentiment: str,
     sentiment_score: float,
 ) -> dict:
-    """
-    Extract per-aspect sentiment and evidence phrases from a single review.
-    No HTTP calls — pure Python.
-    """
     aspect_details = {}
 
     detected = {
@@ -363,6 +359,13 @@ def extract_aspect_details(
         return aspect_details
 
     for aspect in detected:
+        signals = ASPECT_SIGNALS.get(aspect, [])
+        body_lower = review_body.lower()
+
+        # ── Gate: require at least one signal word to be present ──
+        if not any(signal in body_lower for signal in signals):
+            continue  # aspect model fired but no actual signal word found — skip
+
         aspect_sentiment = determine_aspect_sentiment(overall_sentiment, sentiment_score)
         strengths, concerns = extract_phrases_for_aspect(
             review_body, aspect, overall_sentiment
