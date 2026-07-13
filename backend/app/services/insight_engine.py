@@ -268,7 +268,7 @@ def extract_phrases_for_aspect(
                 break
 
         if not phrase or len(phrase.split()) < 3:
-            phrase = clause[:80].capitalize()  # fallback: first 80 chars of clause
+            continue
 
         # Assign to strength or concern based on overall review sentiment
         # Mixed reviews: assign based on clause content heuristics
