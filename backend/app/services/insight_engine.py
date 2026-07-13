@@ -235,7 +235,7 @@ def extract_phrases_for_aspect(
     text: str,
     aspect: str,
     sentiment: str,
-    window: int = 5
+    window: int = 7
 ) -> tuple[list[str], list[str]]:
     """
     Extract short descriptive phrases around signal words for an aspect.
