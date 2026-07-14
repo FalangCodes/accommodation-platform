@@ -354,68 +354,101 @@ function StarRating({ rating, size = "md" }: { rating: number; size?: "sm" | "md
   );
 }
 
+function StarDisplay({ rating }: { rating: number }) {
+  const filled = Math.round(rating);
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          className={`w-3 h-3 ${i <= filled ? "fill-amber-400 text-amber-400" : "text-slate-200 fill-slate-200"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 function AspectInsightCard({
   displayName,
   icon: Icon,
-  studentSentiment,
-  positiveRate,
+  sentimentLabel,
+  starRating,
+  overallOpinion,
   topStrengths,
   topConcerns,
   mentionCount,
 }: {
   displayName: string;
   icon: any;
-  studentSentiment: "positive" | "negative" | "mixed";
-  positiveRate: number;
+  sentimentLabel: string;
+  starRating: number;
+  overallOpinion: string;
   topStrengths: string[];
   topConcerns: string[];
   mentionCount: number;
 }) {
-  const config = {
-    positive: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", label: "Positive", dot: "bg-emerald-500" },
-    negative: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700", label: "Negative", dot: "bg-red-500" },
-    mixed:    { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", label: "Mixed", dot: "bg-amber-400" },
-  }[studentSentiment];
+  const isPositive = sentimentLabel.includes("Positive");
+  const isNegative = sentimentLabel.includes("Negative");
+
+  const config = isPositive
+    ? { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700" }
+    : isNegative
+    ? { bg: "bg-red-50", border: "border-red-200", text: "text-red-700" }
+    : { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700" };
 
   return (
     <div className={`rounded-xl border p-3 ${config.bg} ${config.border}`}>
-      <div className="flex items-center justify-between mb-2">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
           <Icon className="w-3.5 h-3.5 text-slate-500" />
           <span className="text-xs font-semibold text-slate-700">{displayName}</span>
         </div>
         <span className={`text-xs font-medium ${config.text}`}>
-          {config.label}
+          {sentimentLabel}
         </span>
       </div>
 
+      {/* Stars */}
+      <div className="mb-2">
+        <StarDisplay rating={starRating} />
+      </div>
+
+      {/* Overall opinion */}
+      <p className="text-xs text-slate-600 leading-relaxed mb-2 italic">
+        "{overallOpinion}"
+      </p>
+
+      {/* Strengths */}
       {topStrengths.length > 0 && (
-        <div className="space-y-1 mb-1.5">
-          {topStrengths.slice(0, 1).map((s, i) => (
+        <div className="space-y-1 mb-1">
+          {topStrengths.slice(0, 2).map((s, i) => (
             <div key={i} className="flex items-start gap-1.5">
               <span className="text-emerald-500 text-xs mt-0.5 flex-shrink-0">✓</span>
-              <span className="text-xs text-slate-600 leading-relaxed line-clamp-2">{s}</span>
+              <span className="text-xs text-slate-600 leading-relaxed">{s}</span>
             </div>
           ))}
         </div>
       )}
 
+      {/* Concerns */}
       {topConcerns.length > 0 && (
-        <div className="space-y-1">
-          {topConcerns.slice(0, 1).map((c, i) => (
+        <div className="space-y-1 mb-2">
+          {topConcerns.slice(0, 2).map((c, i) => (
             <div key={i} className="flex items-start gap-1.5">
               <span className="text-red-400 text-xs mt-0.5 flex-shrink-0">✗</span>
-              <span className="text-xs text-slate-600 leading-relaxed line-clamp-2">{c}</span>
+              <span className="text-xs text-slate-600 leading-relaxed">{c}</span>
             </div>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-slate-400 mt-2">{mentionCount} student{mentionCount !== 1 ? "s" : ""} mentioned this</p>
+      <p className="text-xs text-slate-400 mt-1">
+        {mentionCount} student{mentionCount !== 1 ? "s" : ""} mentioned this
+      </p>
     </div>
   );
 }
-
 function ReviewCard({ review, blurred }: { review: Review; blurred: boolean }) {
   const sentiment = review.nlp?.sentiment?.toLowerCase() as keyof typeof SENTIMENT_STYLES | undefined;
 
@@ -883,14 +916,16 @@ export default function ListingDetailPage() {
                                       key={aspect}
                                       displayName={data.display_name}
                                       icon={Icon}
-                                      studentSentiment={data.student_sentiment}
-                                      positiveRate={data.positive_rate}
-                                      topStrengths={data.top_strengths}
-                                      topConcerns={data.top_concerns}
+                                      sentimentLabel={data.student_sentiment}
+                                      starRating={data.star_rating}
+                                      overallOpinion={data.overall_opinion}
+                                      topStrengths={data.strengths}
+                                      topConcerns={data.concerns}
                                       mentionCount={data.mention_count}
                                     />
                                   );
                                 })}
+                            
                               {Object.entries(insights.insights).filter(([, data]: [string, any]) => data.show_to_students).length === 0 && (
                                 <p className="text-xs text-slate-400 text-center py-3">
                                   Not enough reviews yet to generate insights. Check back soon.
