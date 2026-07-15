@@ -235,7 +235,7 @@ def extract_phrases_for_aspect(
     text: str,
     aspect: str,
     sentiment: str,
-    window: int = 7
+    window: int = 9
 ) -> tuple[list[str], list[str]]:
     """
     Extract short descriptive phrases around signal words for an aspect.
@@ -288,10 +288,13 @@ def extract_phrases_for_aspect(
         neg_score = sum(1 for s in negative_signals if s in clause_lower_check)
         pos_score = sum(1 for s in positive_signals if s in clause_lower_check)
 
+        cleaned = clean_phrase(phrase)
+        if not cleaned:
+            continue
         if pos_score > neg_score:
-            strengths.append(phrase)
+            strengths.append(cleaned)
         elif neg_score > pos_score:
-            concerns.append(phrase)
+            concerns.append(cleaned)
         else:
             # Use overall review sentiment as tiebreaker
             if sentiment == "positive":
@@ -301,6 +304,19 @@ def extract_phrases_for_aspect(
             # neutral/mixed — skip, not enough signal
 
     return strengths, concerns
+
+WEAK_STARTS = {"and", "or", "but", "the", "a", "an", "so", "yet", "with", "of", "in", "at", "to", "for"}
+
+def clean_phrase(phrase: str) -> str | None:
+    if not phrase:
+        return None
+    words = phrase.split()
+    # Remove leading weak words
+    while words and words[0].lower() in WEAK_STARTS:
+        words = words[1:]
+    if len(words) < 3:
+        return None
+    return " ".join(words).capitalize()
 
 
 def deduplicate_phrases(phrases: list[str], max_count: int = 3) -> list[str]:
@@ -391,15 +407,22 @@ def generate_opinion(
     top_strength: str | None,
     top_concern: str | None,
 ) -> str:
-    """Generate overall_opinion sentence from template."""
     templates = OPINION_TEMPLATES.get(aspect, {})
     template = templates.get(sentiment_label, "Students have shared feedback about this aspect.")
 
-    concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
-    strength_suffix = f", though some students note {top_strength[0].lower() + top_strength[1:]}" if top_strength else ""
+    # Only add concern suffix for positive/generally_positive sentiments
+    # For negative sentiments only add strength suffix
+    if sentiment_label in ("mostly_positive", "generally_positive"):
+        concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
+        strength_suffix = ""
+    elif sentiment_label in ("mostly_negative", "generally_negative"):
+        strength_suffix = f", though some students note {top_strength[0].lower() + top_strength[1:]}" if top_strength else ""
+        concern_suffix = ""
+    else:  # mixed
+        concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
+        strength_suffix = ""
 
     return template.format(concern=concern_suffix, strength=strength_suffix)
-
 
 # ─── Cross-review aggregation ─────────────────────────────────────────────────
 
