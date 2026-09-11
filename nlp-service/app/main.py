@@ -95,9 +95,6 @@ async def analyze_review(request: ReviewRequest):
             for label, score in zip(aspect_result["labels"], aspect_result["scores"])
         }
 
-    # Clause segmentation — new
-    clauses = split_to_clauses(text)
-
     return {
         "review_id": request.review_id,
         "sentiment": sentiment_label,
