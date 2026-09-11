@@ -113,10 +113,15 @@ async def get_my_reviews(
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found")
 
+    from sqlalchemy import or_
+
     result = await db.execute(
         select(Review).where(
             Review.student_id == student.id,
-            Review.deleted_at == None
+            or_(
+                Review.deleted_at == None,
+                Review.deleted_by != current_user.id
+            )
         ).order_by(Review.created_at.desc())
     )
     reviews = result.scalars().all()
@@ -137,7 +142,7 @@ async def get_my_reviews(
             "accommodation_title": acc_map[r.accommodation_id].title if r.accommodation_id in acc_map else "Unknown listing",
             "rating": r.rating,
             "body": r.body,
-            "status": r.status,
+            "status": "quarantined" if r.deleted_at is not None else r.status,
             "created_at": r.created_at,
         }
         for r in reviews
