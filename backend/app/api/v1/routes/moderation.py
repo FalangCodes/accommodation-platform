@@ -330,6 +330,24 @@ async def resolve_appeal(
     appeal.assigned_admin_id = current_user.id
     appeal.resolved_at = datetime.now(timezone.utc)
 
+    # Automatically restore the resource if upheld
+    if body.decision == "upheld":
+        if appeal.resource_type == "review":
+            res = await db.execute(select(Review).where(Review.id == appeal.resource_id))
+            review = res.scalar_one_or_none()
+            if review:
+                review.deleted_at = None
+                review.deleted_by = None
+                review.status = "released"
+                await cache_delete_pattern(f"reviews:{review.accommodation_id}")
+        elif appeal.resource_type == "listing":
+            res = await db.execute(select(Accommodation).where(Accommodation.id == appeal.resource_id))
+            acc = res.scalar_one_or_none()
+            if acc:
+                acc.status = "approved"
+                await cache_delete(key_listing(acc.id))
+                await cache_delete_pattern("search:*")
+
     log_entry = ModerationLog(
         moderator_id=current_user.id,
         action=f"appeal_{body.decision}",

@@ -15,11 +15,21 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   ShieldCheck, Loader2, MapPin, Star, Clock, CheckCircle,
-  XCircle, Trash2, Eye, AlertTriangle, FileText, MessageSquare,
+  XCircle, Trash2, Eye, AlertTriangle, FileText, MessageSquare, Scale, Flag
 } from "lucide-react";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface PendingAppeal {
+  id: number;
+  resource_type: string;
+  resource_id: number;
+  original_action_id: number;
+  reason: string;
+  status: string;
+  created_at: string;
+}
 
 interface PendingListing {
   id: number;
@@ -64,6 +74,11 @@ interface PendingLandlord {
 }
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
+
+async function fetchPendingAppeals(): Promise<PendingAppeal[]> {
+  const { data } = await api.get("/api/v1/moderation/appeals?status=pending");
+  return data;
+}
 
 async function fetchPendingListings(): Promise<PendingListing[]> {
   const { data } = await api.get("/api/v1/moderation/listings/pending");
@@ -492,18 +507,174 @@ function RejectLandlordModal({
   );
 }
 
+// ─── Appeals Tab ────────────────────────────────────────────────────────────────
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+function AppealsTab({
+  onResolve,
+}: {
+  onResolve: (appeal: PendingAppeal, decision: "upheld" | "dismissed") => void;
+}) {
+  const { data: appeals = [], isLoading } = useQuery({
+    queryKey: ["pending-appeals"],
+    queryFn: fetchPendingAppeals,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (appeals.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+          <Scale className="w-7 h-7 text-emerald-500" />
+        </div>
+        <h3 className="font-semibold text-slate-900 mb-1">No pending appeals</h3>
+        <p className="text-sm text-slate-500">All student and landlord appeals have been resolved.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {appeals.map((appeal) => (
+        <div key={appeal.id} className="bg-white border border-slate-200 rounded-2xl p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200 border rounded-full text-xs px-2 py-0.5">
+                  <Scale className="w-3 h-3 mr-1" />
+                  Appeal
+                </Badge>
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  {appeal.resource_type} #{appeal.resource_id}
+                </span>
+              </div>
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-slate-600 mb-1">Reason provided:</p>
+                <p className="text-sm text-slate-700 leading-relaxed italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  "{appeal.reason}"
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span>Appeal #{appeal.id}</span>
+                <span>·</span>
+                <span>Submitted {new Date(appeal.created_at).toLocaleDateString("en-ZA", {
+                  day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+                })}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white w-full"
+                onClick={() => onResolve(appeal, "upheld")}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Uphold (Restore)
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-red-500 hover:bg-red-600 text-white w-full"
+                onClick={() => onResolve(appeal, "dismissed")}
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Dismiss (Keep ban)
+              </Button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ResolveAppealModal({
+  open,
+  appeal,
+  decision,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  open: boolean;
+  appeal: PendingAppeal | null;
+  decision: "upheld" | "dismissed" | null;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+  loading: boolean;
+}) {
+  const [reason, setReason] = useState("");
+  const isUpheld = decision === "upheld";
+
+  return (
+    <Dialog open={open} onOpenChange={() => { if (!loading) { onClose(); setReason(""); } }}>
+      <DialogContent className="rounded-2xl max-w-md bg-white">
+        <DialogHeader>
+          <div className={`flex items-center justify-center w-12 h-12 rounded-2xl border mx-auto mb-2 ${
+            isUpheld ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"
+          }`}>
+            {isUpheld ? <CheckCircle className="w-5 h-5 text-emerald-500" /> : <XCircle className="w-5 h-5 text-red-500" />}
+          </div>
+          <DialogTitle className="text-center">
+            {isUpheld ? "Uphold appeal?" : "Dismiss appeal?"}
+          </DialogTitle>
+          <DialogDescription className="text-center text-sm">
+            {isUpheld 
+              ? `This will overturn the moderation action and restore the ${appeal?.resource_type}.`
+              : `This will reject the appeal and the ${appeal?.resource_type} will remain banned.`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+              Reason (Optional, for internal log)
+            </label>
+            <Textarea
+              className="rounded-xl resize-none h-20 text-sm"
+              placeholder="Add an internal note about this decision..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { onClose(); setReason(""); }} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              className={`flex-1 rounded-xl text-white ${
+                isUpheld ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-500 hover:bg-red-600"
+              }`}
+              onClick={() => onConfirm(reason)}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : isUpheld ? "Uphold" : "Dismiss"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 export default function AdminPage() {
   const { user, loading, isStudent, isLandlord } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"listings" | "reviews" | "landlords">("listings");
+  const [activeTab, setActiveTab] = useState<"listings" | "reviews" | "landlords" | "appeals">("listings");
   const [rejectTarget, setRejectTarget] = useState<PendingListing | null>(null);
   const [removeTarget, setRemoveTarget] = useState<FlaggedReview | null>(null);
   const [rejectLandlordTarget, setRejectLandlordTarget] = useState<PendingLandlord | null>(null);
+  const [resolveAppealTarget, setResolveAppealTarget] = useState<{ appeal: PendingAppeal, decision: "upheld" | "dismissed" } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -576,6 +747,12 @@ export default function AdminPage() {
     enabled: !!user && !isStudent && !isLandlord,
   });
 
+  const { data: pendingAppeals = [] } = useQuery({
+    queryKey: ["pending-appeals"],
+    queryFn: fetchPendingAppeals,
+    enabled: !!user && !isStudent && !isLandlord,
+  });
+
   const handleVerifyLandlord = async (id: number, name: string) => {
     try {
       await api.patch(`/api/v1/landlords/${id}/verify`);
@@ -596,6 +773,24 @@ export default function AdminPage() {
       setRejectLandlordTarget(null);
     } catch {
       toast.error("Failed to reject verification");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResolveAppeal = async (reason: string) => {
+    if (!resolveAppealTarget) return;
+    setActionLoading(true);
+    try {
+      await api.patch(`/api/v1/moderation/appeals/${resolveAppealTarget.appeal.id}/resolve`, { 
+        decision: resolveAppealTarget.decision, 
+        reason 
+      });
+      queryClient.invalidateQueries({ queryKey: ["pending-appeals"] });
+      toast.success(`Appeal ${resolveAppealTarget.decision}.`);
+      setResolveAppealTarget(null);
+    } catch {
+      toast.error("Failed to resolve appeal");
     } finally {
       setActionLoading(false);
     }
@@ -665,6 +860,21 @@ export default function AdminPage() {
             {pendingLandlords.length > 0 && (
               <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-semibold">
                 {pendingLandlords.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("appeals")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "appeals" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Scale className="w-4 h-4" />
+            Appeals
+            {pendingAppeals.length > 0 && (
+              <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-semibold">
+                {pendingAppeals.length}
               </span>
             )}
           </button>
@@ -814,6 +1024,11 @@ export default function AdminPage() {
             onReject={(landlord) => setRejectLandlordTarget(landlord)}
           />
         )}
+        {activeTab === "appeals" && (
+          <AppealsTab
+            onResolve={(appeal, decision) => setResolveAppealTarget({ appeal, decision })}
+          />
+        )}
       </div>
       
 
@@ -837,6 +1052,15 @@ export default function AdminPage() {
         landlord={rejectLandlordTarget}
         onClose={() => setRejectLandlordTarget(null)}
         onConfirm={handleRejectLandlord}
+        loading={actionLoading}
+      />
+
+      <ResolveAppealModal
+        open={!!resolveAppealTarget}
+        appeal={resolveAppealTarget?.appeal ?? null}
+        decision={resolveAppealTarget?.decision ?? null}
+        onClose={() => setResolveAppealTarget(null)}
+        onConfirm={handleResolveAppeal}
         loading={actionLoading}
       />
     </PageLayout>
