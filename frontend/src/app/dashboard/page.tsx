@@ -643,13 +643,13 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
           </div>
 
           {/* Insight Engine Panel */}
-{insights && Object.keys(insights.insights ?? {}).length > 0 && (
+          {insights && insights.insights && Object.keys(insights.insights).length > 0 && (
   <div className="bg-white border border-slate-200 rounded-2xl p-5">
     <div className="flex items-center gap-2 mb-4">
       <TrendingUp className="w-4 h-4 text-slate-400" />
       <h3 className="font-semibold text-slate-900 text-sm">Accommodation Insight Engine</h3>
       <span className="text-xs text-slate-400 ml-auto">
-        Based on {insights.review_count} review{insights.review_count !== 1 ? "s" : ""}
+        Based on {insights.review_count ?? 0} review{(insights.review_count ?? 0) !== 1 ? "s" : ""}
       </span>
     </div>
 
@@ -657,17 +657,13 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
     <div className="space-y-3 mb-6">
       {Object.entries(insights.insights).map(([aspect, data]: [string, any]) => {
         const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
-        const sentimentConfig = {
-          positive: { bar: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", label: "Positive" },
-          negative: { bar: "bg-red-400", text: "text-red-700", bg: "bg-red-50", label: "Negative" },
-          mixed:    { bar: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50", label: "Mixed" },
-        }[data.overall_sentiment as string] ?? { bar: "bg-slate-300", text: "text-slate-500", bg: "bg-slate-50", label: "Unknown" };
+        const isPositive = (data.overall_sentiment ?? "").includes("positive");
+        const isNegative = (data.overall_sentiment ?? "").includes("negative");
 
         return (
           <div key={aspect} className="border border-slate-100 rounded-xl p-3">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
                 <Icon className="w-3.5 h-3.5 text-slate-400" />
                 <span className="text-xs font-semibold text-slate-700">{data.display_name}</span>
                 {!data.show_to_students && (
@@ -676,41 +672,59 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
                   </span>
                 )}
               </div>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sentimentConfig.bg} ${sentimentConfig.text}`}>
-                {sentimentConfig.label}
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                isPositive ? "bg-emerald-50 text-emerald-700" :
+                isNegative ? "bg-red-50 text-red-700" :
+                "bg-amber-50 text-amber-700"
+              }`}>
+                {data.sentiment_label ?? "Mixed"}
               </span>
             </div>
 
-            {/* Positive rate bar */}
+            {/* Stars + positive rate */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-0.5">
+                {[1,2,3,4,5].map((i) => (
+                  <Star key={i} className={`w-3 h-3 ${i <= Math.round(data.star_rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-200 fill-slate-200"}`} />
+                ))}
+              </div>
+              <span className="text-xs text-slate-500">
+                {data.positive_rate ?? 0}% positive · {data.mention_count ?? 0} mentions
+              </span>
+            </div>
+
+            {/* Opinion */}
+            {data.overall_opinion && (
+              <p className="text-xs text-slate-500 italic mb-2">"{data.overall_opinion}"</p>
+            )}
+
+            {/* Progress bar */}
             <div className="flex items-center gap-2 mb-2">
               <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${sentimentConfig.bar}`}
-                  style={{ width: `${data.positive_rate}%` }}
+                  className={`h-full rounded-full ${isPositive ? "bg-emerald-500" : isNegative ? "bg-red-400" : "bg-amber-400"}`}
+                  style={{ width: `${data.positive_rate ?? 0}%` }}
                 />
               </div>
-              <span className="text-xs text-slate-500 w-24 text-right flex-shrink-0">
-                {data.positive_rate}% positive · {data.mention_count} mentions
-              </span>
             </div>
 
             {/* Evidence */}
-            {data.top_strengths.length > 0 && (
+            {(data.strengths ?? []).length > 0 && (
               <div className="space-y-1 mb-1">
-                {data.top_strengths.slice(0, 2).map((s: string, i: number) => (
+                {(data.strengths ?? []).slice(0, 2).map((s: string, i: number) => (
                   <div key={i} className="flex items-start gap-1.5">
                     <span className="text-emerald-500 text-xs flex-shrink-0 mt-0.5">✓</span>
-                    <span className="text-xs text-slate-600 leading-relaxed">{s}</span>
+                    <span className="text-xs text-slate-600">{s}</span>
                   </div>
                 ))}
               </div>
             )}
-            {data.top_concerns.length > 0 && (
+            {(data.concerns ?? []).length > 0 && (
               <div className="space-y-1">
-                {data.top_concerns.slice(0, 2).map((c: string, i: number) => (
+                {(data.concerns ?? []).slice(0, 2).map((c: string, i: number) => (
                   <div key={i} className="flex items-start gap-1.5">
                     <span className="text-red-400 text-xs flex-shrink-0 mt-0.5">✗</span>
-                    <span className="text-xs text-slate-600 leading-relaxed">{c}</span>
+                    <span className="text-xs text-slate-600">{c}</span>
                   </div>
                 ))}
               </div>
@@ -721,13 +735,13 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
     </div>
 
     {/* Recommendations */}
-    {insights.recommendations.length > 0 && (
+    {(insights.recommendations ?? []).length > 0 && (
       <div>
         <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
           Recommendations
         </h4>
         <div className="space-y-3">
-          {insights.recommendations.map((rec: any, i: number) => (
+          {(insights.recommendations ?? []).map((rec: any, i: number) => (
             <div
               key={i}
               className={`rounded-xl p-3 border ${
@@ -753,7 +767,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
       </div>
     )}
 
-    {insights.recommendations.length === 0 && (
+    {(insights.recommendations ?? []).length === 0 && (
       <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
         <p className="text-xs text-emerald-700 font-medium">
           ✓ No critical issues identified. Students are generally satisfied with this property.

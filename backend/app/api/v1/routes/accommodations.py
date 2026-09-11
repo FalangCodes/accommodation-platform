@@ -102,13 +102,14 @@ async def search_accommodations(
     price_min: float = None,
     price_max: float = None,
     min_rating: float = None,
-    gender_policy: str = None,       # ← add
-    funding_type: str = None, 
+    gender_policy: str = None,
+    funding_type: str = None,
+    q: str = None,
     page: int = 1,
     page_size: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
-    cache_key = key_search(university_id, radius_km, price_min, price_max, min_rating, gender_policy, funding_type, page)
+    cache_key = key_search(university_id, radius_km, price_min, price_max, min_rating, gender_policy, funding_type, page, q=q)
     cached = await cache_get(cache_key)
     if cached:
         return cached
@@ -189,7 +190,10 @@ async def search_accommodations(
     if funding_type is not None:
         filter_clauses.append("(a.funding_type = :funding_type OR a.funding_type = 'both')")
         params["funding_type"] = funding_type
-    where_extra = (" AND " + " AND ".join(filter_clauses)) if filter_clauses else ""  # ← now at the end
+    if q is not None and q.strip():
+        filter_clauses.append("a.title ILIKE :q")
+        params["q"] = f"%{q.strip()}%"
+    where_extra = (" AND " + " AND ".join(filter_clauses)) if filter_clauses else ""
 
     having_clause = ""
     if min_rating is not None:
@@ -233,6 +237,7 @@ async def search_accommodations(
     return result_data
 
 @router.get("/my")
+
 async def get_my_accommodations(
     current_user: User = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)

@@ -115,6 +115,7 @@ async function fetchAccommodations(params: {
   min_rating?: number;
   gender_policy?: string;
   funding_type?: string;
+  q?: string;
   page: number;
 }): Promise<SearchResponse> {
   const query = new URLSearchParams();
@@ -123,8 +124,9 @@ async function fetchAccommodations(params: {
   if (params.price_min)    query.set("price_min", String(params.price_min));
   if (params.price_max)    query.set("price_max", String(params.price_max));
   if (params.min_rating)   query.set("min_rating", String(params.min_rating));
-  if (params.gender_policy) query.set("gender_policy", params.gender_policy);  // ← add
-  if (params.funding_type)  query.set("funding_type", params.funding_type);    // ← add
+  if (params.gender_policy) query.set("gender_policy", params.gender_policy);
+  if (params.funding_type)  query.set("funding_type", params.funding_type);
+  if (params.q && params.q.trim()) query.set("q", params.q.trim());
   query.set("page", String(params.page));
   query.set("page_size", String(PAGE_SIZE));
 
@@ -368,6 +370,16 @@ function FilterBar({
           </SelectContent>
         </Select>
 
+        {/* Name search */}
+        <input
+          type="text"
+          value={filters.q ?? ""}
+          onChange={(e) => onChange({ q: e.target.value || undefined })}
+          onKeyDown={(e) => e.key === "Enter" && onApply()}
+          placeholder="Search by name…"
+          className="flex-1 min-w-[160px] h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
+        />
+
         {/* More filters toggle */}
         <Button
           variant="outline"
@@ -518,8 +530,9 @@ interface Filters {
   price_min: number;
   price_max: number;
   min_rating: number;
-  gender_policy?: "male" | "female";   // ← add
-  funding_type?: "self_funded" | "bursary";  // ← add
+  gender_policy?: "male" | "female";
+  funding_type?: "self_funded" | "bursary";
+  q?: string;
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -541,6 +554,7 @@ function SearchPageInner() {
     min_rating: Number(searchParams.get("min_rating") ?? 0),
     gender_policy: (searchParams.get("gender_policy") as "male" | "female") ?? undefined,
     funding_type: (searchParams.get("funding_type") as "self_funded" | "bursary") ?? undefined,
+    q: searchParams.get("q") ?? undefined,
   });
 
   // Applied filters — only update when user clicks Search
@@ -554,6 +568,7 @@ function SearchPageInner() {
     min_rating: Number(searchParams.get("min_rating") ?? 0),
     gender_policy: (searchParams.get("gender_policy") as "male" | "female") ?? undefined,
     funding_type: (searchParams.get("funding_type") as "self_funded" | "bursary") ?? undefined,
+    q: searchParams.get("q") ?? undefined,
   });
   const [page, setPage] = useState(
     Number(searchParams.get("page") ?? 1)

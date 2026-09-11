@@ -55,3 +55,10 @@ class RemoveReviewBody(BaseModel):
 class AppealResolveBody(BaseModel):
     decision: str  # 'upheld' or 'dismissed'
     reason: Optional[str] = None
+
+
+class AppealCreate(BaseModel):
+    resource_type: str            # 'review' or 'listing' or 'landlord'
+    resource_id: int
+    original_action_id: Optional[int] = None  # if omitted, backend resolves the latest log entry
+    reason: str                   # appellant's stated reason (min 20 chars enforced at API level)

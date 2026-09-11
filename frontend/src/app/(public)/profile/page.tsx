@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   GraduationCap, Star, Trash2, MapPin, ShieldCheck, Loader2,
   AlertTriangle, Mail, BookOpen, Clock, Home, BarChart2,
-  CheckCircle, XCircle, Activity, Building2,
+  CheckCircle, XCircle, Activity, Building2, Flag,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -92,6 +92,11 @@ function StudentProfile({ user }: { user: any }) {
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // ── Appeal state ──
+  const [appealTarget, setAppealTarget] = useState<Review | null>(null);
+  const [appealReason, setAppealReason] = useState("");
+  const [appealing, setAppealing] = useState(false);
+
   useEffect(() => {
     reviewsApi.getMyReviews()
       .then((res) => setReviews(res.data))
@@ -111,6 +116,30 @@ function StudentProfile({ user }: { user: any }) {
       toast.error("Failed to delete review");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleAppeal = async () => {
+    if (!appealTarget) return;
+    if (appealReason.trim().length < 20) {
+      toast.error("Please provide at least 20 characters explaining your appeal.");
+      return;
+    }
+    setAppealing(true);
+    try {
+      await api.post("/api/v1/appeals", {
+        resource_type: "review",
+        resource_id: appealTarget.id,
+        reason: appealReason.trim(),
+      });
+      toast.success("Appeal submitted. An administrator will review it shortly.");
+      setAppealTarget(null);
+      setAppealReason("");
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? "Failed to submit appeal.";
+      toast.error(msg);
+    } finally {
+      setAppealing(false);
     }
   };
 
@@ -194,12 +223,26 @@ function StudentProfile({ user }: { user: any }) {
                       </Badge>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setDeleteTarget(review.id)}
-                    className="shrink-0 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Appeal — only for quarantined reviews */}
+                    {review.status === "quarantined" && (
+                      <button
+                        onClick={() => { setAppealTarget(review); setAppealReason(""); }}
+                        className="p-2 rounded-xl text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+                        title="Appeal this moderation decision"
+                      >
+                        <Flag className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDeleteTarget(review.id)}
+                      className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -207,6 +250,7 @@ function StudentProfile({ user }: { user: any }) {
         )}
       </div>
 
+      {/* ── Delete dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <DialogContent className="rounded-2xl max-w-sm bg-white">
           <DialogHeader>
@@ -226,9 +270,47 @@ function StudentProfile({ user }: { user: any }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Appeal dialog ── */}
+      <Dialog open={!!appealTarget} onOpenChange={(open) => { if (!open) { setAppealTarget(null); setAppealReason(""); } }}>
+        <DialogContent className="rounded-2xl max-w-sm bg-white">
+          <DialogHeader>
+            <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 mx-auto mb-2">
+              <Flag className="h-5 w-5 text-amber-500" />
+            </div>
+            <DialogTitle className="text-center">Appeal moderation decision</DialogTitle>
+            <DialogDescription className="text-center text-sm">
+              Explain why you believe your review was incorrectly flagged. An administrator will review your appeal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            <textarea
+              value={appealReason}
+              onChange={(e) => setAppealReason(e.target.value)}
+              placeholder="Describe why this review should be reinstated…"
+              rows={4}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 resize-none"
+            />
+            <p className="text-xs text-slate-400 mt-1 text-right">{appealReason.trim().length} / 20 min</p>
+          </div>
+          <DialogFooter className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setAppealTarget(null); setAppealReason(""); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAppeal}
+              disabled={appealing || appealReason.trim().length < 20}
+              className="flex-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              {appealing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting...</> : "Submit appeal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
+
 
 // ─── Landlord profile ─────────────────────────────────────────────────────────
 
@@ -245,10 +327,39 @@ function LandlordProfile({ user }: { user: any }) {
     queryFn: () => api.get("/api/v1/accommodations/my").then(r => r.data as LandlordListing[]),
   });
 
+  // ── Appeal state ──
+  const [appealTarget, setAppealTarget] = useState<LandlordListing | null>(null);
+  const [appealReason, setAppealReason] = useState("");
+  const [appealing, setAppealing] = useState(false);
+
   const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-    approved: { label: "Live", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
-    pending:  { label: "Pending", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
-    rejected: { label: "Rejected", color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
+    approved: { label: "Live",     color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
+    pending:  { label: "Pending",  color: "bg-amber-50 text-amber-700 border-amber-200",       icon: Clock },
+    rejected: { label: "Rejected", color: "bg-red-50 text-red-700 border-red-200",             icon: XCircle },
+  };
+
+  const handleAppeal = async () => {
+    if (!appealTarget) return;
+    if (appealReason.trim().length < 20) {
+      toast.error("Please provide at least 20 characters explaining your appeal.");
+      return;
+    }
+    setAppealing(true);
+    try {
+      await api.post("/api/v1/appeals", {
+        resource_type: "listing",
+        resource_id: appealTarget.id,
+        reason: appealReason.trim(),
+      });
+      toast.success("Appeal submitted. An administrator will review it shortly.");
+      setAppealTarget(null);
+      setAppealReason("");
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? "Failed to submit appeal.";
+      toast.error(msg);
+    } finally {
+      setAppealing(false);
+    }
   };
 
   return (
@@ -353,10 +464,12 @@ function LandlordProfile({ user }: { user: any }) {
               return (
                 <div
                   key={listing.id}
-                  onClick={() => router.push(`/listings/${listing.id}`)}
-                  className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
+                  className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3"
                 >
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => router.push(`/listings/${listing.id}`)}
+                  >
                     <p className="text-sm font-semibold text-slate-800 truncate">{listing.title}</p>
                     <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3 h-3" />{listing.address}
@@ -373,6 +486,16 @@ function LandlordProfile({ user }: { user: any }) {
                       <Icon className="w-3 h-3 mr-1" />
                       {cfg.label}
                     </Badge>
+                    {/* Appeal button — only on rejected listings */}
+                    {listing.status === "rejected" && (
+                      <button
+                        onClick={() => { setAppealTarget(listing); setAppealReason(""); }}
+                        className="p-1.5 rounded-xl text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+                        title="Appeal this rejection"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -380,6 +503,43 @@ function LandlordProfile({ user }: { user: any }) {
           </div>
         )}
       </div>
+
+      {/* ── Appeal dialog ── */}
+      <Dialog open={!!appealTarget} onOpenChange={(open) => { if (!open) { setAppealTarget(null); setAppealReason(""); } }}>
+        <DialogContent className="rounded-2xl max-w-sm bg-white">
+          <DialogHeader>
+            <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 mx-auto mb-2">
+              <Flag className="h-5 w-5 text-amber-500" />
+            </div>
+            <DialogTitle className="text-center">Appeal listing rejection</DialogTitle>
+            <DialogDescription className="text-center text-sm">
+              Explain why you believe your listing was incorrectly rejected. An administrator will review your appeal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            <textarea
+              value={appealReason}
+              onChange={(e) => setAppealReason(e.target.value)}
+              placeholder="Describe why this listing should be approved…"
+              rows={4}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 resize-none"
+            />
+            <p className="text-xs text-slate-400 mt-1 text-right">{appealReason.trim().length} / 20 min</p>
+          </div>
+          <DialogFooter className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setAppealTarget(null); setAppealReason(""); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAppeal}
+              disabled={appealing || appealReason.trim().length < 20}
+              className="flex-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              {appealing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting...</> : "Submit appeal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

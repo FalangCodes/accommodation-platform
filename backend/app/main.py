@@ -7,6 +7,7 @@ from app.api.v1.routes.universities import router as universities_router
 from app.api.v1.routes.landlords import router as landlords_router
 from app.api.v1.routes.admin import router as admin_router
 from app.api.v1.routes.reports import router as reports_router
+from app.api.v1.routes.appeals import router as appeals_router
 from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
 from app.services.report_service import run_monthly_auto_reports
@@ -71,6 +72,7 @@ app.include_router(universities_router, prefix="/api/v1")
 app.include_router(landlords_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
+app.include_router(appeals_router, prefix="/api/v1")
 
 
 @app.get("/health")
