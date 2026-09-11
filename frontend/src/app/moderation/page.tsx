@@ -28,7 +28,6 @@ interface PendingAppeal {
   original_action_id: number;
   reason: string;
   status: string;
-  created_at: string;
 }
 
 interface PendingListing {
@@ -73,6 +72,19 @@ interface PendingLandlord {
   address: string | null;
 }
 
+interface SuspendedListing {
+  id: number;
+  title: string;
+  address: string;
+  price_min: number;
+  price_max: number;
+  created_at: string;
+  landlord: {
+    display_name: string | null;
+    contact_phone: string | null;
+  } | null;
+}
+
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
 async function fetchPendingAppeals(): Promise<PendingAppeal[]> {
@@ -82,6 +94,11 @@ async function fetchPendingAppeals(): Promise<PendingAppeal[]> {
 
 async function fetchPendingListings(): Promise<PendingListing[]> {
   const { data } = await api.get("/api/v1/moderation/listings/pending");
+  return data;
+}
+
+async function fetchSuspendedListings(): Promise<SuspendedListing[]> {
+  const { data } = await api.get("/api/v1/moderation/listings/suspended");
   return data;
 }
 
@@ -507,6 +524,93 @@ function RejectLandlordModal({
   );
 }
 
+// ─── Suspended Listings Tab ───────────────────────────────────────────────────
+
+function SuspendedListingsTab({
+  onReinstate,
+  onRemove,
+}: {
+  onReinstate: (listing: SuspendedListing) => void;
+  onRemove: (listing: SuspendedListing) => void;
+}) {
+  const { data: listings = [], isLoading } = useQuery({
+    queryKey: ["suspended-listings"],
+    queryFn: fetchSuspendedListings,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (listings.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-7 h-7 text-emerald-500" />
+        </div>
+        <h3 className="font-semibold text-slate-900 mb-1">No suspended listings</h3>
+        <p className="text-sm text-slate-500">All live listings are currently active.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {listings.map((listing) => (
+        <div key={listing.id} className="bg-white border border-amber-200 rounded-2xl p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-semibold text-slate-900 truncate">{listing.title}</h3>
+                <span className="bg-amber-100 text-amber-700 border border-amber-200 rounded-full text-xs px-2 py-0.5 flex-shrink-0 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Suspended
+                </span>
+              </div>
+              <p className="text-sm text-slate-500 flex items-center gap-1 mb-1">
+                <MapPin className="w-3.5 h-3.5" />{listing.address}
+              </p>
+              {listing.landlord?.display_name && (
+                <p className="text-xs text-slate-400">
+                  Landlord: <span className="font-medium text-slate-600">{listing.landlord.display_name}</span>
+                  {listing.landlord.contact_phone && ` · ${listing.landlord.contact_phone}`}
+                </p>
+              )}
+              <p className="text-xs text-slate-400 mt-1">
+                R{listing.price_min.toLocaleString()}
+                {listing.price_max > listing.price_min && ` – R${listing.price_max.toLocaleString()}`} / month
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white w-full"
+                onClick={() => onReinstate(listing)}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Reinstate
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs bg-red-500 hover:bg-red-600 text-white w-full"
+                onClick={() => onRemove(listing)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Appeals Tab ────────────────────────────────────────────────────────────────
 
 function AppealsTab({
@@ -564,10 +668,6 @@ function AppealsTab({
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-400">
                 <span>Appeal #{appeal.id}</span>
-                <span>·</span>
-                <span>Submitted {new Date(appeal.created_at).toLocaleDateString("en-ZA", {
-                  day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-                })}</span>
               </div>
             </div>
 
@@ -670,11 +770,13 @@ export default function AdminPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"listings" | "reviews" | "landlords" | "appeals">("listings");
+  const [activeTab, setActiveTab] = useState<"listings" | "reviews" | "landlords" | "suspended" | "appeals">("listings");
   const [rejectTarget, setRejectTarget] = useState<PendingListing | null>(null);
   const [removeTarget, setRemoveTarget] = useState<FlaggedReview | null>(null);
   const [rejectLandlordTarget, setRejectLandlordTarget] = useState<PendingLandlord | null>(null);
   const [resolveAppealTarget, setResolveAppealTarget] = useState<{ appeal: PendingAppeal, decision: "upheld" | "dismissed" } | null>(null);
+  const [reinstateTarget, setReinstateTarget] = useState<SuspendedListing | null>(null);
+  const [removeListingTarget, setRemoveListingTarget] = useState<SuspendedListing | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -753,6 +855,12 @@ export default function AdminPage() {
     enabled: !!user && !isStudent && !isLandlord,
   });
 
+  const { data: suspendedListings = [] } = useQuery({
+    queryKey: ["suspended-listings"],
+    queryFn: fetchSuspendedListings,
+    enabled: !!user && !isStudent && !isLandlord,
+  });
+
   const handleVerifyLandlord = async (id: number, name: string) => {
     try {
       await api.patch(`/api/v1/landlords/${id}/verify`);
@@ -791,6 +899,36 @@ export default function AdminPage() {
       setResolveAppealTarget(null);
     } catch {
       toast.error("Failed to resolve appeal");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReinstate = async () => {
+    if (!reinstateTarget) return;
+    setActionLoading(true);
+    try {
+      await api.patch(`/api/v1/moderation/listings/${reinstateTarget.id}/reinstate`);
+      queryClient.invalidateQueries({ queryKey: ["suspended-listings"] });
+      toast.success(`"${reinstateTarget.title}" reinstated and is now live.`);
+      setReinstateTarget(null);
+    } catch {
+      toast.error("Failed to reinstate listing");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRemoveListing = async (reason: string) => {
+    if (!removeListingTarget) return;
+    setActionLoading(true);
+    try {
+      await api.delete(`/api/v1/moderation/listings/${removeListingTarget.id}/remove`, { data: { reason } });
+      queryClient.invalidateQueries({ queryKey: ["suspended-listings"] });
+      toast.success(`"${removeListingTarget.title}" has been permanently removed.`);
+      setRemoveListingTarget(null);
+    } catch {
+      toast.error("Failed to remove listing");
     } finally {
       setActionLoading(false);
     }
@@ -860,6 +998,21 @@ export default function AdminPage() {
             {pendingLandlords.length > 0 && (
               <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-semibold">
                 {pendingLandlords.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("suspended")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "suspended" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Suspended
+            {suspendedListings.length > 0 && (
+              <span className="bg-red-100 text-red-700 text-xs px-1.5 py-0.5 rounded-full font-semibold">
+                {suspendedListings.length}
               </span>
             )}
           </button>
@@ -1029,6 +1182,12 @@ export default function AdminPage() {
             onResolve={(appeal, decision) => setResolveAppealTarget({ appeal, decision })}
           />
         )}
+        {activeTab === "suspended" && (
+          <SuspendedListingsTab
+            onReinstate={(listing) => setReinstateTarget(listing)}
+            onRemove={(listing) => setRemoveListingTarget(listing)}
+          />
+        )}
       </div>
       
 
@@ -1063,6 +1222,37 @@ export default function AdminPage() {
         onConfirm={handleResolveAppeal}
         loading={actionLoading}
       />
+
+      <RejectModal
+        open={!!removeListingTarget}
+        title={`permanently remove ${removeListingTarget?.title ?? ""}`}
+        onClose={() => setRemoveListingTarget(null)}
+        onConfirm={handleRemoveListing}
+        loading={actionLoading}
+      />
+
+      <Dialog open={!!reinstateTarget} onOpenChange={(o) => !o && setReinstateTarget(null)}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Reinstate listing</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to restore "{reinstateTarget?.title}"? It will become publicly visible again immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setReinstateTarget(null)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleReinstate}
+              disabled={actionLoading}
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Yes, reinstate"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }

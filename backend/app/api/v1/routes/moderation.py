@@ -13,7 +13,7 @@ from app.models.review import Review
 from app.models.moderation import ModerationLog
 from app.models.landlord import Landlord
 from datetime import datetime, timezone
-from app.models.moderation import ModerationQueue, ModerationLog, Appeal
+from app.models.moderation import ModerationLog, Appeal
 from app.core.dependencies import get_current_moderator
 from app.schemas.moderation import AppealOut, AppealResolveBody
 from app.services.cache_service import cache_delete_pattern, cache_delete, key_listing
@@ -86,6 +86,120 @@ async def reject_listing(
     await db.commit()
 
     return {"message": f"Listing {accommodation_id} rejected", "reason": decision.reason}
+
+
+@router.patch("/listings/{accommodation_id}/suspend", status_code=status.HTTP_200_OK)
+async def suspend_listing(
+    accommodation_id: int,
+    decision: ModerationDecision,
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id))
+    accommodation = result.scalar_one_or_none()
+    if not accommodation:
+        raise HTTPException(status_code=404, detail="Accommodation not found")
+    if accommodation.status == "suspended":
+        raise HTTPException(status_code=409, detail="Listing is already suspended")
+    if accommodation.status != "approved":
+        raise HTTPException(status_code=400, detail="Only approved listings can be suspended")
+    accommodation.status = "suspended"
+    log = ModerationLog(
+        moderator_id=current_user.id,
+        action="suspend_listing",
+        resource_type="accommodation",
+        resource_id=accommodation_id,
+        reason=decision.reason
+    )
+    db.add(log)
+    await db.commit()
+    await cache_delete(key_listing(accommodation_id))
+    await cache_delete_pattern("search:*")
+    return {"message": f"Listing {accommodation_id} suspended", "reason": decision.reason}
+
+
+@router.patch("/listings/{accommodation_id}/reinstate", status_code=status.HTTP_200_OK)
+async def reinstate_listing(
+    accommodation_id: int,
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id))
+    accommodation = result.scalar_one_or_none()
+    if not accommodation:
+        raise HTTPException(status_code=404, detail="Accommodation not found")
+    if accommodation.status != "suspended":
+        raise HTTPException(status_code=400, detail="Only suspended listings can be reinstated")
+    accommodation.status = "approved"
+    log = ModerationLog(
+        moderator_id=current_user.id,
+        action="reinstate_listing",
+        resource_type="accommodation",
+        resource_id=accommodation_id,
+    )
+    db.add(log)
+    await db.commit()
+    await cache_delete(key_listing(accommodation_id))
+    await cache_delete_pattern("search:*")
+    return {"message": f"Listing {accommodation_id} reinstated"}
+
+
+@router.delete("/listings/{accommodation_id}/remove", status_code=status.HTTP_200_OK)
+async def remove_listing(
+    accommodation_id: int,
+    decision: ModerationDecision,
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id))
+    accommodation = result.scalar_one_or_none()
+    if not accommodation:
+        raise HTTPException(status_code=404, detail="Accommodation not found")
+    if accommodation.status == "removed":
+        raise HTTPException(status_code=409, detail="Listing is already removed")
+    accommodation.status = "removed"
+    log = ModerationLog(
+        moderator_id=current_user.id,
+        action="remove_listing",
+        resource_type="accommodation",
+        resource_id=accommodation_id,
+        reason=decision.reason
+    )
+    db.add(log)
+    await db.commit()
+    await cache_delete(key_listing(accommodation_id))
+    await cache_delete_pattern("search:*")
+    return {"message": f"Listing {accommodation_id} removed", "reason": decision.reason}
+
+
+@router.get("/listings/suspended")
+async def get_suspended_listings(
+    current_user: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Accommodation)
+        .where(Accommodation.status == "suspended")
+        .order_by(Accommodation.created_at.desc())
+    )
+    listings = result.scalars().all()
+    output = []
+    for l in listings:
+        landlord_result = await db.execute(select(Landlord).where(Landlord.id == l.landlord_id))
+        landlord = landlord_result.scalar_one_or_none()
+        output.append({
+            "id": l.id,
+            "title": l.title,
+            "address": l.address,
+            "price_min": l.price_min,
+            "price_max": l.price_max,
+            "created_at": l.created_at,
+            "landlord": {
+                "display_name": landlord.display_name if landlord else None,
+                "contact_phone": landlord.contact_phone if landlord else None,
+            } if landlord else None,
+        })
+    return output
 
 
 # ── REVIEW MODERATION ─────────────────────────────────────────────────────────

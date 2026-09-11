@@ -1,24 +1,6 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.sql import func
 from app.db.base import Base
-
-class ModerationQueue(Base):
-    __tablename__ = "moderation_queue"
-
-    id = Column(Integer, primary_key=True, index=True)
-    resource_type = Column(String, nullable=False) # 'listing' or 'review'
-    resource_id = Column(Integer, nullable=False)
-    reason_code = Column(String, nullable=True)
-    auto_flagged = Column(Boolean, default=False)
-    
-    assigned_moderator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    province = Column(String, nullable=False, index=True)
-    
-    status = Column(String, default="pending", index=True) # pending, resolved
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    actioned_at = Column(DateTime(timezone=True), nullable=True)
-    sla_deadline = Column(DateTime(timezone=True), nullable=False)
 
 class ModerationLog(Base):
     __tablename__ = "moderation_log"

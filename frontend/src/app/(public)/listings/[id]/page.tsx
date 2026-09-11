@@ -546,11 +546,19 @@ function PhotoGrid({ images }: { images: { url: string }[] }) {
 export default function ListingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isModerator, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const isGuest = !user;
+  const canModerate = isModerator || isAdmin;
+
   const [activeTab, setActiveTab] = useState<"details" | "reviews" | "location">("details");
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  
+  // Moderation state
+  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  const [modReason, setModReason] = useState("");
+  const [modLoading, setModLoading] = useState(false);
 
   const { data: listing, isLoading: listingLoading, isError } = useQuery({
     queryKey: ["listing", id],
@@ -567,6 +575,49 @@ export default function ListingDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["reviews", id] });
     queryClient.invalidateQueries({ queryKey: ["listing", id] });
     toast.success("Review submitted! AI analysis is running in the background.");
+  };
+
+  const handleSuspend = async () => {
+    if (!modReason.trim()) { toast.error("Please provide a reason"); return; }
+    setModLoading(true);
+    try {
+      await api.patch(`/api/v1/moderation/listings/${id}/suspend`, { reason: modReason });
+      queryClient.invalidateQueries({ queryKey: ["listing", id] });
+      toast.success("Listing suspended successfully.");
+      setSuspendModalOpen(false);
+      setModReason("");
+    } catch {
+      toast.error("Failed to suspend listing");
+    } finally {
+      setModLoading(false);
+    }
+  };
+
+  const handleReinstate = async () => {
+    setModLoading(true);
+    try {
+      await api.patch(`/api/v1/moderation/listings/${id}/reinstate`);
+      queryClient.invalidateQueries({ queryKey: ["listing", id] });
+      toast.success("Listing reinstated successfully.");
+    } catch {
+      toast.error("Failed to reinstate listing");
+    } finally {
+      setModLoading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!modReason.trim()) { toast.error("Please provide a reason"); return; }
+    setModLoading(true);
+    try {
+      await api.delete(`/api/v1/moderation/listings/${id}/remove`, { data: { reason: modReason } });
+      toast.success("Listing removed permanently.");
+      router.push("/search");
+    } catch {
+      toast.error("Failed to remove listing");
+    } finally {
+      setModLoading(false);
+    }
   };
 
   const { data: insights } = useQuery({
@@ -960,6 +1011,39 @@ export default function ListingDetailPage() {
                       </Button>
                     )}
                   </div>
+
+                  {canModerate && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
+                      <h3 className="font-semibold text-red-900 text-sm mb-3">Moderator Actions</h3>
+                      <div className="space-y-2">
+                        {listing.status === "suspended" ? (
+                          <Button
+                            size="sm"
+                            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={handleReinstate}
+                            disabled={modLoading}
+                          >
+                            {modLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reinstate Listing"}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 text-white"
+                            onClick={() => setSuspendModalOpen(true)}
+                          >
+                            Suspend Listing
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          className="w-full rounded-xl border border-red-300 bg-white text-red-700 hover:bg-red-50"
+                          onClick={() => setRemoveModalOpen(true)}
+                        >
+                          Permanently Remove
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -977,6 +1061,77 @@ export default function ListingDetailPage() {
           onSuccess={handleReviewSuccess}
         />
       )}
+
+      {/* Moderation Modals */}
+      <Dialog open={suspendModalOpen} onOpenChange={setSuspendModalOpen}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Suspend Listing</DialogTitle>
+            <DialogDescription>
+              Temporarily hide this listing from students while it's investigated.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-semibold text-slate-700 block mb-2">Reason for suspension</label>
+              <Textarea
+                className="rounded-xl resize-none text-sm"
+                rows={3}
+                placeholder="e.g. Received multiple safety reports"
+                value={modReason}
+                onChange={(e) => setModReason(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setSuspendModalOpen(false); setModReason(""); }}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={handleSuspend}
+                disabled={modLoading || !modReason.trim()}
+              >
+                {modLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Suspend"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={removeModalOpen} onOpenChange={setRemoveModalOpen}>
+        <DialogContent className="max-w-sm rounded-2xl border-red-100">
+          <DialogHeader>
+            <DialogTitle className="text-red-700">Permanently Remove Listing</DialogTitle>
+            <DialogDescription>
+              This will ban the listing from the platform permanently. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-semibold text-slate-700 block mb-2">Reason for removal</label>
+              <Textarea
+                className="rounded-xl resize-none text-sm"
+                rows={3}
+                placeholder="e.g. Confirmed scam listing"
+                value={modReason}
+                onChange={(e) => setModReason(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setRemoveModalOpen(false); setModReason(""); }}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleRemove}
+                disabled={modLoading || !modReason.trim()}
+              >
+                {modLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Remove"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }

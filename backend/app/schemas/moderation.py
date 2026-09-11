@@ -3,22 +3,6 @@ from typing import Optional
 from datetime import datetime
 
 
-class ModerationQueueItem(BaseModel):
-    id: int
-    resource_type: str
-    resource_id: int
-    reason_code: Optional[str] = None
-    auto_flagged: bool
-    assigned_moderator_id: Optional[int] = None
-    province: str
-    status: str
-    created_at: datetime
-    actioned_at: Optional[datetime] = None
-    sla_deadline: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class ModerationLogEntry(BaseModel):
     id: int
     moderator_id: int
