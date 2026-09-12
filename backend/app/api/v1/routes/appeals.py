@@ -58,10 +58,13 @@ async def submit_appeal(
         resolved_action_id = log_entry.id
     else:
         # Auto-resolve: find the most recent log entry for this resource
+        # Note: ModerationLog saves listings under 'accommodation'
+        lookup_type = "accommodation" if body.resource_type == "listing" else body.resource_type
+        
         log_result = await db.execute(
             select(ModerationLog)
             .where(
-                ModerationLog.resource_type == body.resource_type,
+                ModerationLog.resource_type == lookup_type,
                 ModerationLog.resource_id == body.resource_id,
             )
             .order_by(ModerationLog.id.desc())
