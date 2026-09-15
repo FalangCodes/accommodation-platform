@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.future import select
 from app.api.v1.routes import auth, accommodations, reviews, moderation
 from app.api.v1.routes.universities import router as universities_router
 from app.api.v1.routes.landlords import router as landlords_router
@@ -11,6 +13,7 @@ from app.api.v1.routes.appeals import router as appeals_router
 from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
 from app.services.report_service import run_monthly_auto_reports
+from app.models.review import Review
 import app.db.models
 
 scheduler = AsyncIOScheduler()
@@ -19,6 +22,23 @@ async def scheduled_flush():
     print("Running scheduled view flush...")
     async with AsyncSessionLocal() as db:
         await flush_views_to_db(db)
+
+async def sweep_stuck_reviews():
+    """Retry NLP analysis for reviews stuck in pending_analysis for more than 5 minutes."""
+    from app.services.review_service import process_review_nlp
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Review).where(
+                Review.status == "pending_analysis",
+                Review.created_at < cutoff
+            )
+        )
+        stuck = result.scalars().all()
+        if stuck:
+            print(f"[Sweep] Found {len(stuck)} stuck review(s) — retrying NLP...")
+        for review in stuck:
+            await process_review_nlp(review.id, review.body)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,6 +59,12 @@ async def lifespan(app: FastAPI):
         hour=0,
         minute=5,
         id="monthly_reports"
+    )
+    scheduler.add_job(
+        sweep_stuck_reviews,
+        "interval",
+        minutes=10,
+        id="sweep_stuck_reviews"
     )
     scheduler.start()
     print("Scheduler started")
