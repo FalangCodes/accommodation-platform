@@ -45,6 +45,27 @@ async def get_current_user(
     return user
 
 
+optional_bearer_scheme = HTTPBearer(auto_error=False)
+
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials = Depends(optional_bearer_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User | None:
+    if not credentials:
+        return None
+        
+    token = credentials.credentials
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            return None
+        query = select(User).where(User.id == int(payload["sub"]))
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+    except Exception:
+        return None
+
+
 async def get_current_student(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "student":
         raise HTTPException(

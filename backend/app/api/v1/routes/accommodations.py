@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from typing import List
 import hashlib
 from app.db.base import get_db
-from app.core.dependencies import get_current_landlord
+from app.core.dependencies import get_current_landlord, get_optional_user
 from app.models.user import User
 from app.models.landlord import Landlord
 from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
@@ -107,8 +107,16 @@ async def search_accommodations(
     q: str = None,
     page: int = 1,
     page_size: int = 10,
+    current_user: User = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
+    page = max(1, page)
+    if page > 1 and not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to view page 2 and beyond."
+        )
+
     cache_key = key_search(university_id, radius_km, price_min, price_max, min_rating, gender_policy, funding_type, page, q=q)
     cached = await cache_get(cache_key)
     if cached:
