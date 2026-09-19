@@ -56,7 +56,7 @@ async def create_accommodation(
     property_type=accommodation_in.property_type,
     website=accommodation_in.website,
     amenities=accommodation_in.amenities,
-    status="pending"
+    status="incomplete"
 )
     db.add(new_accommodation)
     await db.commit()
@@ -660,6 +660,7 @@ async def upload_ownership_document(
 
     blob_url = await upload_image(file_bytes, f"ownership_{accommodation_id}", file.content_type)
     accommodation.ownership_doc_url = blob_url
+    accommodation.status = "pending"
 
     # Invalidate cache
     await cache_delete(key_listing(accommodation_id))

@@ -33,7 +33,7 @@ interface Listing {
   address: string;
   price_min: number;
   price_max: number;
-  status: "pending" | "approved" | "rejected";
+  status: "incomplete" | "pending" | "approved" | "rejected";
   created_at: string;
   total_reviews: number;
   average_rating: number | null;
@@ -62,7 +62,8 @@ interface LandlordProfile {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<string, any> = {
+  incomplete: { label: "Missing Document", color: "bg-slate-50 text-slate-700 border-slate-200", icon: FileText },
   pending:  { label: "Pending review",  color: "bg-amber-50 text-amber-700 border-amber-200",   icon: Clock },
   approved: { label: "Live",            color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
   rejected: { label: "Rejected",        color: "bg-red-50 text-red-700 border-red-200",          icon: XCircle },
