@@ -298,6 +298,123 @@ async def get_my_accommodations(
 
     return output
 
+
+# ─── Public: Platform Stats ───────────────────────────────────────────────────
+# NOTE: These static-path routes MUST be declared before any /{accommodation_id}
+# parameterized routes, otherwise FastAPI tries to cast "platform-stats" / "featured"
+# as integers and returns 422.
+
+@router.get("/platform-stats")
+async def get_platform_stats(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns aggregate platform stats for the landing page.
+    Cached for 24 hours. No auth required.
+    """
+    cached = await cache_get(key_platform_stats())
+    if cached:
+        return cached
+
+    # Total approved listings
+    listings_result = await db.execute(
+        select(func.count()).where(
+            Accommodation.status == "approved"
+        ).select_from(Accommodation)
+    )
+    total_listings = listings_result.scalar() or 0
+
+    # Total non-deleted reviews
+    reviews_result = await db.execute(
+        select(func.count()).where(
+            Review.deleted_at == None
+        ).select_from(Review)
+    )
+    total_reviews = reviews_result.scalar() or 0
+
+    # Total verified students
+    from app.models.student import Student
+    students_result = await db.execute(
+        select(func.count()).select_from(Student)
+    )
+    total_students = students_result.scalar() or 0
+
+    payload = {
+        "listings": total_listings,
+        "reviews": total_reviews,
+        "students": total_students,
+    }
+
+    await cache_set(key_platform_stats(), payload, TTL_FEATURED)
+    return payload
+
+
+# ─── Public: Featured Listings ────────────────────────────────────────────────
+
+@router.get("/featured")
+async def get_featured_listings(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns top 3 approved listings ranked by avg rating then total views.
+    Cached for 24 hours. No auth required.
+    """
+    cached = await cache_get(key_featured())
+    if cached:
+        return cached
+
+    result = await db.execute(
+        text("""
+            SELECT
+                a.id,
+                a.title,
+                a.address,
+                a.price_min,
+                a.price_max,
+                COALESCE(AVG(r.rating), 0)::float AS avg_rating,
+                COUNT(DISTINCT r.id) AS review_count,
+                COUNT(DISTINCT av.id) AS view_count,
+                (
+                    SELECT ai2.blob_url
+                    FROM accommodation_images ai2
+                    WHERE ai2.accommodation_id = a.id
+                    ORDER BY ai2.display_order ASC
+                    LIMIT 1
+                ) AS first_image_url
+            FROM accommodations a
+            LEFT JOIN reviews r
+                ON r.accommodation_id = a.id AND r.deleted_at IS NULL
+            LEFT JOIN accommodation_views av
+                ON av.accommodation_id = a.id
+            WHERE a.status = 'approved'
+            GROUP BY a.id
+            ORDER BY avg_rating DESC, view_count DESC
+            LIMIT 3
+        """)
+    )
+    rows = result.mappings().all()
+
+    payload = [
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "address": row["address"],
+            "price_min": float(row["price_min"]),
+            "price_max": float(row["price_max"]),
+            "avg_rating": round(float(row["avg_rating"]), 1),
+            "review_count": int(row["review_count"]),
+            "view_count": int(row["view_count"]),
+            "first_image_url": row["first_image_url"],
+        }
+        for row in rows
+    ]
+
+    await cache_set(key_featured(), payload, TTL_FEATURED)
+    return payload
+
+
+# ─── Parameterized routes below — keep all /{accommodation_id} routes AFTER this line ───
+
 @router.get("/{accommodation_id}/analytics")
 async def get_analytics(
     accommodation_id: int,
@@ -691,114 +808,3 @@ async def get_accommodation_insights(
         "review_count": insight.review_count,
         "generated_at": insight.generated_at,
     }
-
-
-# ─── Public: Platform Stats ───────────────────────────────────────────────────
-
-@router.get("/platform-stats")
-async def get_platform_stats(
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Returns aggregate platform stats for the landing page.
-    Cached for 24 hours. No auth required.
-    """
-    cached = await cache_get(key_platform_stats())
-    if cached:
-        return cached
-
-    # Total approved listings
-    listings_result = await db.execute(
-        select(func.count()).where(
-            Accommodation.status == "approved"
-        ).select_from(Accommodation)
-    )
-    total_listings = listings_result.scalar() or 0
-
-    # Total non-deleted reviews
-    reviews_result = await db.execute(
-        select(func.count()).where(
-            Review.deleted_at == None
-        ).select_from(Review)
-    )
-    total_reviews = reviews_result.scalar() or 0
-
-    # Total verified students
-    from app.models.student import Student
-    students_result = await db.execute(
-        select(func.count()).select_from(Student)
-    )
-    total_students = students_result.scalar() or 0
-
-    payload = {
-        "listings": total_listings,
-        "reviews": total_reviews,
-        "students": total_students,
-    }
-
-    await cache_set(key_platform_stats(), payload, TTL_FEATURED)
-    return payload
-
-
-# ─── Public: Featured Listings ────────────────────────────────────────────────
-
-@router.get("/featured")
-async def get_featured_listings(
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Returns top 3 approved listings ranked by avg rating then total views.
-    Cached for 24 hours. No auth required.
-    """
-    cached = await cache_get(key_featured())
-    if cached:
-        return cached
-
-    result = await db.execute(
-        text("""
-            SELECT
-                a.id,
-                a.title,
-                a.address,
-                a.price_min,
-                a.price_max,
-                COALESCE(AVG(r.rating), 0)::float AS avg_rating,
-                COUNT(DISTINCT r.id) AS review_count,
-                COUNT(DISTINCT av.id) AS view_count,
-                (
-                    SELECT ai2.blob_url
-                    FROM accommodation_images ai2
-                    WHERE ai2.accommodation_id = a.id
-                    ORDER BY ai2.display_order ASC
-                    LIMIT 1
-                ) AS first_image_url
-            FROM accommodations a
-            LEFT JOIN reviews r
-                ON r.accommodation_id = a.id AND r.deleted_at IS NULL
-            LEFT JOIN accommodation_views av
-                ON av.accommodation_id = a.id
-            WHERE a.status = 'approved'
-            GROUP BY a.id
-            ORDER BY avg_rating DESC, view_count DESC
-            LIMIT 3
-        """)
-    )
-    rows = result.mappings().all()
-
-    payload = [
-        {
-            "id": row["id"],
-            "title": row["title"],
-            "address": row["address"],
-            "price_min": float(row["price_min"]),
-            "price_max": float(row["price_max"]),
-            "avg_rating": round(float(row["avg_rating"]), 1),
-            "review_count": int(row["review_count"]),
-            "view_count": int(row["view_count"]),
-            "first_image_url": row["first_image_url"],
-        }
-        for row in rows
-    ]
-
-    await cache_set(key_featured(), payload, TTL_FEATURED)
-    return payload
