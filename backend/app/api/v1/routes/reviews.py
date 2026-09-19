@@ -91,7 +91,7 @@ async def submit_review(
     await cache_delete_pattern("search:*")
     await db.refresh(new_review)
 
-    # 6. TODO: Trigger NLP task via Celery (next step)
+    # 6. Trigger NLP task in background
     background_tasks.add_task(
         process_review_nlp,
         new_review.id,
