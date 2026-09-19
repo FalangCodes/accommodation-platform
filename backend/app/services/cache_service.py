@@ -25,6 +25,7 @@ TTL_SEARCH       = 60 * 5         # 5 minutes
 TTL_LISTING      = 60 * 10        # 10 minutes
 TTL_REVIEWS      = 60 * 5         # 5 minutes
 TTL_ANALYTICS    = 60 * 30        # 30 minutes
+TTL_FEATURED     = 60 * 60 * 24   # 24 hours
 
 # ─── Key builders ─────────────────────────────────────────────────────────────
 
@@ -43,6 +44,12 @@ def key_reviews(accommodation_id: int) -> str:
 
 def key_analytics(accommodation_id: int) -> str:
     return f"analytics:{accommodation_id}"
+
+def key_platform_stats() -> str:
+    return "platform:stats"
+
+def key_featured() -> str:
+    return "featured:listings"
 
 # ─── Core helpers ─────────────────────────────────────────────────────────────
 
