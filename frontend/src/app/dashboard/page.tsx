@@ -508,14 +508,14 @@ function CreateListingModal({
                     className="flex-1 rounded-xl text-slate-500"
                     onClick={() => setStep(5)}
                   >
-                    Skip for now
+                    Save as incomplete (Skip doc)
                   </Button>
                 )}
                 <Button
                   className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
                   onClick={() => setStep(5)}
                 >
-                  {ownershipUploaded ? "Continue to photos" : "Skip to photos"}
+                  {ownershipUploaded ? "Submit for review & add photos" : "Skip to photos"}
                 </Button>
               </div>
             </div>
@@ -555,7 +555,7 @@ function CreateListingModal({
                   onClick={handleSubmit}
                   disabled={submitting}
                 >
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting...</> : "Submit listing"}
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Save & Continue"}
                 </Button>
               )}
             </div>
