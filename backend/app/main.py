@@ -47,8 +47,9 @@ async def sweep_stuck_reviews():
         for review in stuck:
             await process_review_nlp(review.id, review.body)
             if len(stuck) > 1:
-                # Rate-limit governor: 4s between calls = max ~15 req/min (Gemini free tier)
-                await asyncio.sleep(4)
+                # Rate-limit governor: gemini-3.6-flash free tier = 5 RPM max
+                # 60s / 5 = 12s per request minimum. 13s gives a safe buffer.
+                await asyncio.sleep(13)
 
 
 @asynccontextmanager
