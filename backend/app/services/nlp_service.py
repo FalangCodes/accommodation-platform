@@ -119,17 +119,21 @@ Review text:
         client = _get_client()
 
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 response_mime_type="application/json",
-                response_schema=ReviewAnalysis,
+                # Use .model_json_schema() — the correct SDK pattern that avoids
+                # the Automatic Function Calling (AFC) deprecation warning
+                response_json_schema=ReviewAnalysis.model_json_schema(),
                 temperature=0.1,   # Low temperature for consistent, deterministic analysis
             ),
         )
 
-        analysis: ReviewAnalysis = response.parsed
+        # Parse the JSON text response into our Pydantic model
+        import json as _json
+        analysis = ReviewAnalysis.model_validate(_json.loads(response.text))
 
         # ── Build backward-compatible aspects dict (confidence scores by label) ──
         aspects_compat: dict[str, float] = {}
