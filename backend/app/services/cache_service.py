@@ -26,6 +26,7 @@ TTL_LISTING      = 60 * 10        # 10 minutes
 TTL_REVIEWS      = 60 * 5         # 5 minutes
 TTL_ANALYTICS    = 60 * 30        # 30 minutes
 TTL_FEATURED     = 60 * 60 * 24   # 24 hours
+TTL_ACTIVITY     = 60 * 60        # 1 hour
 
 # ─── Key builders ─────────────────────────────────────────────────────────────
 
@@ -50,6 +51,9 @@ def key_platform_stats() -> str:
 
 def key_featured() -> str:
     return "featured:listings"
+
+def key_activity() -> str:
+    return "activity:feed"
 
 # ─── Core helpers ─────────────────────────────────────────────────────────────
 

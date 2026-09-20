@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import ActivityToast from "@/components/activity-toast";
 import {
   GraduationCap,
   MapPin,
@@ -20,10 +21,6 @@ import {
   MessageSquareText,
   TrendingUp,
   Building2,
-  Facebook,
-  Twitter,
-  Instagram,
-  Linkedin,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -131,20 +128,15 @@ export default function Home() {
 
       {/* ── Hero ── */}
       <section className="relative flex items-center w-full min-h-[680px] px-5 lg:px-20 py-16 lg:py-0">
-        {/* Background gradient (no external image needed) */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#0d2137] via-[#1f4e79] to-[#2e75b6]"
-        />
-        {/* Subtle dot grid overlay */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none opacity-10"
-          style={{
-            backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)",
-            backgroundSize: "28px 28px",
-          }}
-        />
+        {/* Background photo with dark blue overlay */}
+        <div aria-hidden className="absolute inset-0 pointer-events-none">
+          <img
+            src="/hero-campus.jpg"
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover object-center"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[rgba(13,33,55,0.88)] via-[rgba(31,78,121,0.70)] to-[rgba(31,78,121,0.30)]" />
+        </div>
 
         {/* Search card */}
         <div className="bg-white/95 backdrop-blur-sm flex flex-col gap-6 items-start p-9 relative rounded-2xl shadow-2xl w-full max-w-[540px]">
@@ -494,14 +486,18 @@ export default function Home() {
                 Simplifying and securing student housing near major South African campuses.
               </p>
               <div className="flex gap-3">
-                {[Facebook, Twitter, Instagram, Linkedin].map((Icon, i) => (
-                  <div
-                    key={i}
-                    className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors"
-                  >
-                    <Icon className="w-4 h-4 text-white" />
-                  </div>
-                ))}
+                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                </div>
+                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg>
+                </div>
+                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
+                </div>
+                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>
+                </div>
               </div>
             </div>
 
@@ -555,6 +551,9 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* ── Global activity toast — fixed bottom-right, cycles across whole page ── */}
+      <ActivityToast />
 
     </div>
   );

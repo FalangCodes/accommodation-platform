@@ -17,8 +17,8 @@ from app.services.storage_service import upload_image, delete_image
 from app.services.cache_service import (
     cache_get, cache_set, cache_delete, cache_delete_pattern, get_today_views,
     key_search, key_listing, key_reviews, key_analytics, increment_view,
-    key_platform_stats, key_featured,
-    TTL_SEARCH, TTL_LISTING, TTL_REVIEWS, TTL_ANALYTICS, TTL_FEATURED
+    key_platform_stats, key_featured, key_activity,
+    TTL_SEARCH, TTL_LISTING, TTL_REVIEWS, TTL_ANALYTICS, TTL_FEATURED, TTL_ACTIVITY
 )
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
@@ -411,6 +411,67 @@ async def get_featured_listings(
 
     await cache_set(key_featured(), payload, TTL_FEATURED)
     return payload
+
+
+# ─── Public: Activity Feed ────────────────────────────────────────────────────
+
+@router.get("/activity")
+async def get_activity_feed(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns a shuffled mix of real reviews and approved listings for the
+    landing page social proof toast. No timestamps exposed. Cached 1 hour.
+    No auth required.
+    """
+    cached = await cache_get(key_activity())
+    if cached:
+        return cached
+
+    import random
+
+    # Pull a random sample of analysed, non-deleted reviews with listing title
+    reviews_result = await db.execute(
+        text("""
+            SELECT r.rating, a.title AS accommodation_title
+            FROM reviews r
+            JOIN accommodations a ON a.id = r.accommodation_id
+            WHERE r.deleted_at IS NULL
+              AND r.status != 'pending_analysis'
+              AND a.status = 'approved'
+            ORDER BY RANDOM()
+            LIMIT 8
+        """)
+    )
+
+    # Pull a random sample of approved listings
+    listings_result = await db.execute(
+        text("""
+            SELECT title
+            FROM accommodations
+            WHERE status = 'approved'
+            ORDER BY RANDOM()
+            LIMIT 4
+        """)
+    )
+
+    items = []
+    for row in reviews_result.mappings():
+        items.append({
+            "type": "review",
+            "rating": int(row["rating"]),
+            "title": row["accommodation_title"],
+        })
+    for row in listings_result.mappings():
+        items.append({
+            "type": "listing",
+            "title": row["title"],
+        })
+
+    random.shuffle(items)
+
+    await cache_set(key_activity(), items, TTL_ACTIVITY)
+    return items
 
 
 # ─── Parameterized routes below — keep all /{accommodation_id} routes AFTER this line ───
