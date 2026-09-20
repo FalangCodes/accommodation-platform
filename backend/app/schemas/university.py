@@ -6,5 +6,7 @@ class UniversityOut(BaseModel):
     name: str
     domain: str
     province: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
     model_config = {"from_attributes": True}

@@ -33,6 +33,23 @@ const listingIcon = L.divIcon({
   popupAnchor: [0, -32],
 });
 
+// Red university campus pin
+const universityIcon = L.divIcon({
+  className: "",
+  html: `<div style="
+    background: #DC2626;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    width: 36px;
+    height: 36px;
+    border: 3px solid white;
+    box-shadow: 0 2px 10px rgba(220,38,38,0.45);
+  "></div>`,
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+  popupAnchor: [0, -36],
+});
+
 interface MapItem {
   id: number;
   title: string;
@@ -44,33 +61,42 @@ interface MapItem {
   lng?: number;
 }
 
+interface UniversityPin {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
 interface SearchMapProps {
   items: MapItem[];
   isLoading: boolean;
   onMarkerClick: (id: number) => void;
+  university?: UniversityPin | null;
 }
 
 // Component to auto-fit bounds when items change
-function FitBounds({ items }: { items: MapItem[] }) {
+function FitBounds({ items, university }: { items: MapItem[]; university?: UniversityPin | null }) {
   const map = useMap();
   useEffect(() => {
-    const validItems = items.filter(
-      (i) => i.lat !== undefined && i.lng !== undefined
-    );
-    if (validItems.length === 0) return;
-    if (validItems.length === 1) {
-      map.setView([validItems[0].lat!, validItems[0].lng!], 14);
+    const points: [number, number][] = items
+      .filter((i) => i.lat !== undefined && i.lng !== undefined)
+      .map((i) => [i.lat!, i.lng!]);
+
+    // Always include the university pin in bounds if available
+    if (university) points.push([university.lat, university.lng]);
+
+    if (points.length === 0) return;
+    if (points.length === 1) {
+      map.setView(points[0], 14);
       return;
     }
-    const bounds = L.latLngBounds(
-      validItems.map((i) => [i.lat!, i.lng!])
-    );
+    const bounds = L.latLngBounds(points);
     map.fitBounds(bounds, { padding: [40, 40] });
-  }, [items, map]);
+  }, [items, university, map]);
   return null;
 }
 
-export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMapProps) {
+export default function SearchMap({ items, isLoading, onMarkerClick, university }: SearchMapProps) {
   const validItems = items.filter(
     (i) => i.lat !== undefined && i.lng !== undefined && i.lat !== 0 && i.lng !== 0
   );
@@ -86,7 +112,7 @@ export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMap
     );
   }
 
-  if (validItems.length === 0) {
+  if (validItems.length === 0 && !university) {
     return (
       <div className="w-full h-[600px] rounded-2xl bg-slate-100 flex items-center justify-center">
         <div className="text-center">
@@ -99,6 +125,20 @@ export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMap
 
   return (
     <div className="w-full h-[600px] rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+      {/* Legend */}
+      <div className="absolute z-[1000] bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-md border border-slate-100 px-3 py-2 flex flex-col gap-1.5 text-xs font-medium text-slate-700">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full bg-[#1F4E79]" />
+          Accommodation
+        </div>
+        {university && (
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-full bg-red-600" />
+            {university.name}
+          </div>
+        )}
+      </div>
+
       <MapContainer
         center={defaultCenter}
         zoom={12}
@@ -109,7 +149,9 @@ export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMap
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds items={validItems} />
+        <FitBounds items={validItems} university={university} />
+
+        {/* Accommodation markers */}
         {validItems.map((item) => (
           <Marker
             key={item.id}
@@ -138,7 +180,22 @@ export default function SearchMap({ items, isLoading, onMarkerClick }: SearchMap
             </Popup>
           </Marker>
         ))}
+
+        {/* University campus pin — red */}
+        {university && (
+          <Marker
+            position={[university.lat, university.lng]}
+            icon={universityIcon}
+          >
+            <Popup>
+              <div className="min-w-[160px]">
+                <p className="font-bold text-slate-900 text-sm mb-0.5">{university.name}</p>
+                <p className="text-xs text-red-600 font-medium">University campus</p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );
-}
+}

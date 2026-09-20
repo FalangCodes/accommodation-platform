@@ -53,6 +53,8 @@ interface University {
   name: string;
   domain: string;
   province: string;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 interface Accommodation {
@@ -734,6 +736,14 @@ function SearchPageInner() {
             items={items}
             isLoading={isLoading}
             onMarkerClick={(id) => router.push(`/listings/${id}`)}
+            university={(() => {
+              const u = universities.find(
+                (u) => u.id === appliedFilters.university_id
+              );
+              return u && u.lat != null && u.lng != null
+                ? { name: u.name, lat: u.lat, lng: u.lng }
+                : null;
+            })()}
           />
         )}
 
