@@ -24,7 +24,14 @@ async def scheduled_flush():
         await flush_views_to_db(db)
 
 async def sweep_stuck_reviews():
-    """Retry NLP analysis for reviews stuck in pending_analysis for more than 5 minutes."""
+    """
+    Retry NLP analysis for reviews stuck in pending_analysis for more than 5 minutes.
+
+    A 4-second delay is enforced between each review to act as a rate-limit
+    governor, keeping us safely under Gemini's 15 RPM free tier limit.
+    At 4s per review that's a max of 15 requests/min — exactly at the limit.
+    """
+    import asyncio
     from app.services.review_service import process_review_nlp
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     async with AsyncSessionLocal() as db:
@@ -39,6 +46,10 @@ async def sweep_stuck_reviews():
             print(f"[Sweep] Found {len(stuck)} stuck review(s) — retrying NLP...")
         for review in stuck:
             await process_review_nlp(review.id, review.body)
+            if len(stuck) > 1:
+                # Rate-limit governor: 4s between calls = max ~15 req/min (Gemini free tier)
+                await asyncio.sleep(4)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
