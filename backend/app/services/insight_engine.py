@@ -1,10 +1,13 @@
 import re
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import func
 from app.models.review import Review, ReviewNLPResult
 from app.models.insight import AccommodationInsight
+
+logger = logging.getLogger(__name__)
 
 # ─── Thresholds ───────────────────────────────────────────────────────────────
 
@@ -399,30 +402,85 @@ def extract_aspect_details(
     return aspect_details
 
 
-# ─── Opinion generation ───────────────────────────────────────────────────────
+# ─── Opinion generation (Gemini Flash — async, human-quality summaries) ───────
 
-def generate_opinion(
+async def generate_opinion(
     aspect: str,
     sentiment_label: str,
     top_strength: str | None,
     top_concern: str | None,
+    mention_count: int = 0,
+    positive_rate: int = 0,
 ) -> str:
-    templates = OPINION_TEMPLATES.get(aspect, {})
-    template = templates.get(sentiment_label, "Students have shared feedback about this aspect.")
+    """
+    Generate a human-sounding 1-sentence opinion for an aspect using Gemini Flash.
 
-    # Only add concern suffix for positive/generally_positive sentiments
-    # For negative sentiments only add strength suffix
-    if sentiment_label in ("mostly_positive", "generally_positive"):
-        concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
-        strength_suffix = ""
-    elif sentiment_label in ("mostly_negative", "generally_negative"):
-        strength_suffix = f", though some students note {top_strength[0].lower() + top_strength[1:]}" if top_strength else ""
-        concern_suffix = ""
-    else:  # mixed
-        concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
-        strength_suffix = ""
+    Falls back gracefully to the deterministic template if Gemini is unavailable,
+    ensuring insight regeneration never fails due to an AI outage.
+    """
+    from app.core.config import settings
 
-    return template.format(concern=concern_suffix, strength=strength_suffix)
+    # ── Template fallback (always available, zero latency) ────────────────────
+    def _template_fallback() -> str:
+        templates = OPINION_TEMPLATES.get(aspect, {})
+        template = templates.get(sentiment_label, "Students have shared feedback about this aspect.")
+        if sentiment_label in ("mostly_positive", "generally_positive"):
+            concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
+            strength_suffix = ""
+        elif sentiment_label in ("mostly_negative", "generally_negative"):
+            strength_suffix = f", though some students note {top_strength[0].lower() + top_strength[1:]}" if top_strength else ""
+            concern_suffix = ""
+        else:
+            concern_suffix = f", although {top_concern[0].lower() + top_concern[1:]}" if top_concern else ""
+            strength_suffix = ""
+        return template.format(concern=concern_suffix, strength=strength_suffix)
+
+    # ── Skip Gemini if key is not configured ─────────────────────────────────
+    if not settings.GEMINI_API_KEY:
+        return _template_fallback()
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        display_name = ASPECT_DISPLAY_NAMES.get(aspect, aspect)
+
+        # Build context for Gemini
+        evidence_parts = []
+        if top_strength:
+            evidence_parts.append(f'Positive evidence: "{top_strength}"')
+        if top_concern:
+            evidence_parts.append(f'Negative evidence: "{top_concern}"')
+        evidence = " | ".join(evidence_parts) if evidence_parts else "No specific evidence phrases available."
+
+        prompt = (
+            f"Write exactly ONE concise sentence (max 25 words) summarising student opinions on "
+            f"'{display_name}' for a student accommodation listing. "
+            f"Overall sentiment: {sentiment_label.replace('_', ' ')} "
+            f"({positive_rate}% positive, based on {mention_count} student mentions). "
+            f"{evidence}. "
+            f"Write in third person. Do not start with 'Students'. Be natural and factual."
+        )
+
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=60,
+            ),
+        )
+
+        opinion = response.text.strip().strip('"').strip("'")
+        if opinion:
+            return opinion
+        return _template_fallback()
+
+    except Exception as e:
+        logger.warning(f"[InsightEngine] Gemini opinion generation failed for '{aspect}': {e} — using template fallback")
+        return _template_fallback()
+
 
 # ─── Cross-review aggregation ─────────────────────────────────────────────────
 
@@ -497,12 +555,14 @@ async def regenerate_accommodation_insights(
         top_strengths = deduplicate_phrases(data["strengths"], max_count=3)
         top_concerns = deduplicate_phrases(data["concerns"], max_count=3)
 
-        # Generate opinion
-        overall_opinion = generate_opinion(
+        # Generate opinion (async — uses Gemini Flash with template fallback)
+        overall_opinion = await generate_opinion(
             aspect,
             sentiment_label,
             top_strengths[0] if top_strengths else None,
             top_concerns[0] if top_concerns else None,
+            mention_count=mentions,
+            positive_rate=positive_rate,
         )
 
         # Star rating

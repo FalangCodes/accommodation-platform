@@ -16,9 +16,10 @@ class Settings(BaseSettings):
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str = "listing-images"
     ENCRYPTION_KEY: str = "U--coEBDscfXIuKRUdRLHoUCeV31NAkLxqI2FmIhLPc="
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     class Config:
         env_file = ".env"
         case_sensitive = True
 
-settings = Settings()
+settings = Settings()
