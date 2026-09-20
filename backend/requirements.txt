@@ -72,10 +72,9 @@ wcwidth==0.6.0
 websockets==16.0
 wrapt==2.1.2
 psycopg2-binary
-# transformers==4.37.2  # removed — now handled by Gemini Flash
-# torch==2.2.0  # removed — now handled by Gemini Flash
-# tf-keras==2.15.0  # removed — now handled by Gemini Flash
+# transformers==4.37.2  # removed - now handled by Gemini Flash
+# torch==2.2.0  # removed - now handled by Gemini Flash
+# tf-keras==2.15.0  # removed - now handled by Gemini Flash
 azure-storage-blob==12.19.0
 apscheduler==3.10.4
-
 google-genai>=0.8.0  # Gemini Flash NLP engine
