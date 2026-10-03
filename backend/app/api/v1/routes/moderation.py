@@ -1,3 +1,4 @@
+from app.services.document_links import ownership_document_link, landlord_document_link
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -277,7 +278,7 @@ async def get_pending_listings(
             "price_min": l.price_min,
             "price_max": l.price_max,
             "created_at": l.created_at,
-            "ownership_doc_url": l.ownership_doc_url,
+            "ownership_doc_url": ownership_document_link(l.id, l.ownership_doc_url),
             "landlord": {
                 "display_name": landlord.display_name if landlord else None,
                 "contact_phone": landlord.contact_phone if landlord else None,

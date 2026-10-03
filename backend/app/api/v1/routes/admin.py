@@ -1,3 +1,4 @@
+from app.services.document_links import ownership_document_link, landlord_document_link
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -231,7 +232,7 @@ async def get_universities_tree(
                 "funding_type": acc.funding_type,
                 "property_type": acc.property_type,
                 "website": acc.website,
-                "ownership_doc_url": acc.ownership_doc_url,
+                "ownership_doc_url": ownership_document_link(acc.id, acc.ownership_doc_url),
                 "total_views": db_views + today_views,
                 "review_count": review_count,
                 "avg_rating": avg_rating,
@@ -370,8 +371,8 @@ async def get_all_landlords(
             "website": landlord.website,
             "verification_status": landlord.verification_status,
             "id_number": id_number,
-            "id_copy_url": landlord.id_copy_url,
-            "proof_of_address_url": landlord.proof_of_address_url,
+            "id_copy_url": landlord_document_link(landlord.id, "id-copy", landlord.id_copy_url),
+            "proof_of_address_url": landlord_document_link(landlord.id, "proof-of-address", landlord.proof_of_address_url),
             "is_active": user.is_active,
             "listing_count": listing_count,
             "joined": user.created_at,

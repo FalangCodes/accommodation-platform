@@ -58,7 +58,7 @@ def resources(monkeypatch):
                      ModerationLog(id=3, moderator_id=6, action="landlord_verification_rejected", resource_type="landlord", resource_id=1),
                      ModerationLog(id=4, moderator_id=6, action="suspend_listing", resource_type="accommodation", resource_id=2)])
     session.commit()
-    listing = SimpleNamespace(id=1, landlord_id=1, status="pending")
+    listing = SimpleNamespace(id=1, landlord_id=1, status="pending", ownership_doc_url=None)
     scripted = {
         Accommodation: [listing, SimpleNamespace(id=2, landlord_id=2, status="approved")],
         AccommodationImage: [SimpleNamespace(id=1, accommodation_id=1, blob_url="mock://image1"),

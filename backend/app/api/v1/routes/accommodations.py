@@ -23,6 +23,8 @@ from app.services.cache_service import (
 
 from app.services.guest_access import GUEST_SEARCH_PAGE_SIZE, search_response
 from app.services.resource_access import owned_accommodation, visible_accommodation
+from app.services.document_links import ownership_document_link, listing_document_response
+from app.api.v1.routes.documents import store_document_upload
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
 
@@ -297,7 +299,7 @@ async def get_my_accommodations(
             "created_at": acc.created_at,
             "total_reviews": total_reviews,
             "average_rating": average_rating,
-            "ownership_doc_url": acc.ownership_doc_url,
+            "ownership_doc_url": ownership_document_link(acc.id, acc.ownership_doc_url),
         })
 
     return output
@@ -590,7 +592,7 @@ async def get_accommodation(
     cache_key = key_listing(accommodation_id)
     cached = await cache_get(cache_key)
     if cached is not None:
-        return {**cached, "status": accommodation.status}
+        return await listing_document_response(db, {**cached, "status": accommodation.status}, accommodation, current_user)
 
     # 2. Coordinates from PostGIS
     coords_result = await db.execute(
@@ -678,7 +680,6 @@ async def get_accommodation(
         "property_type": accommodation.property_type,
         "website": accommodation.website,
         "amenities": accommodation.amenities,
-        "ownership_doc_url": accommodation.ownership_doc_url,
         "images": [{"id": img.id, "url": img.blob_url, "order": img.display_order} for img in images],
         "total_reviews": total_reviews,
         "average_rating": average_rating,
@@ -688,7 +689,7 @@ async def get_accommodation(
     }
 
     await cache_set(cache_key, result_data, TTL_LISTING)
-    return result_data
+    return await listing_document_response(db, result_data, accommodation, current_user)
 
 @router.post("/{accommodation_id}/images")
 async def upload_accommodation_image(
@@ -806,24 +807,15 @@ async def upload_ownership_document(
     if not accommodation:
         raise HTTPException(status_code=403, detail="Listing not found or does not belong to you")
 
-    # Validate file
-    allowed = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
-    if file.content_type not in allowed:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and PDF files are allowed")
-
-    file_bytes = await file.read()
-    if len(file_bytes) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File must be under 10MB")
-
-    blob_url = await upload_image(file_bytes, f"ownership_{accommodation_id}", file.content_type)
-    accommodation.ownership_doc_url = blob_url
+    accommodation.ownership_doc_url = await store_document_upload(file)
     accommodation.status = "pending"
 
-    # Invalidate cache
-    await cache_delete(key_listing(accommodation_id))
     await db.commit()
+    await cache_delete(key_listing(accommodation_id))
+    await cache_delete_pattern("search:*")
+    await cache_delete(key_featured())
 
-    return {"detail": "Ownership document uploaded", "url": blob_url}
+    return {"detail": "Ownership document uploaded", "url": ownership_document_link(accommodation.id, accommodation.ownership_doc_url)}
 
 @router.get("/{accommodation_id}/insights")
 async def get_accommodation_insights(

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     MODERATOR_INVITE_KEY: str = "change-me-in-env"
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str = "listing-images"
+    AZURE_DOCUMENT_CONTAINER_NAME: str = "verification-documents"
     ENCRYPTION_KEY: str = "U--coEBDscfXIuKRUdRLHoUCeV31NAkLxqI2FmIhLPc="
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     FRONTEND_URL: str = "http://localhost:3000"

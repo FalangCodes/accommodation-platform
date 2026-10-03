@@ -1,5 +1,7 @@
 "use client";
 
+import { ProtectedDocumentLink } from "@/components/protected-document-link";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -413,28 +415,22 @@ function LandlordVerificationTab({
               {/* Document links */}
               <div className="flex items-center gap-3">
                 {landlord.id_copy_url ? (
-                  <a
-                    href={landlord.id_copy_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <ProtectedDocumentLink href={landlord.id_copy_url}
                     className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    View ID copy
-                  </a>
+                    Download ID copy
+                  </ProtectedDocumentLink>
                 ) : (
                   <span className="text-xs text-red-500">⚠ ID copy not uploaded</span>
                 )}
                 {landlord.proof_of_address_url ? (
-                  <a
-                    href={landlord.proof_of_address_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <ProtectedDocumentLink href={landlord.proof_of_address_url}
                     className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    View proof of address
-                  </a>
+                    Download proof of address
+                  </ProtectedDocumentLink>
                 ) : (
                   <span className="text-xs text-red-500">⚠ Proof of address not uploaded</span>
                 )}
@@ -1109,15 +1105,12 @@ export default function AdminPage() {
                         {/* Ownership document */}
                         <div className="mt-3">
                           {listing.ownership_doc_url ? (
-                            <a
-                              href={listing.ownership_doc_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <ProtectedDocumentLink href={listing.ownership_doc_url}
                               className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
                             >
                               <FileText className="w-3.5 h-3.5" />
-                              View ownership document
-                            </a>
+                              Download ownership document
+                            </ProtectedDocumentLink>
                           ) : (
                             <span className="text-xs text-red-500 flex items-center gap-1.5">
                               <AlertTriangle className="w-3.5 h-3.5" />

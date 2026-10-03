@@ -1,5 +1,7 @@
 "use client";
 
+import { ProtectedDocumentLink } from "@/components/protected-document-link";
+
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -383,15 +385,12 @@ const handleGenerateReport = async () => {
                     Ownership document
                   </h2>
                   {listing.ownership_doc_url ? (
-                    <a
-                      href={listing.ownership_doc_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <ProtectedDocumentLink href={listing.ownership_doc_url}
                       className="flex items-center gap-2 text-sm text-blue-600 hover:underline font-medium"
                     >
                       <Eye className="w-4 h-4" />
-                      View ownership document
-                    </a>
+                      Download ownership document
+                    </ProtectedDocumentLink>
                   ) : (
                     <p className="text-sm text-amber-600 flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4" />
@@ -573,24 +572,18 @@ const handleGenerateReport = async () => {
 
                       <div className="flex gap-2">
                         {landlordData.id_copy_url && (
-                          <a
-                            href={landlordData.id_copy_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <ProtectedDocumentLink href={landlordData.id_copy_url}
                             className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                           >
                             <Eye className="w-3 h-3" /> ID copy
-                          </a>
+                          </ProtectedDocumentLink>
                         )}
                         {landlordData.proof_of_address_url && (
-                          <a
-                            href={landlordData.proof_of_address_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <ProtectedDocumentLink href={landlordData.proof_of_address_url}
                             className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                           >
                             <Eye className="w-3 h-3" /> Proof of address
-                          </a>
+                          </ProtectedDocumentLink>
                         )}
                       </div>
 

@@ -9,14 +9,11 @@ from app.models.user import User
 from app.models.landlord import Landlord
 from app.models.accommodation import Accommodation
 from app.models.moderation import ModerationLog
-from app.services.storage_service import upload_image
+from app.api.v1.routes.documents import store_document_upload
+from app.services.document_links import landlord_document_link
 from app.core.encryption import decrypt_value
 
 router = APIRouter(prefix="/landlords", tags=["Landlords"])
-
-ALLOWED_DOC_TYPES = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
-MAX_DOC_SIZE = 10 * 1024 * 1024  # 10MB for documents
-
 
 async def get_landlord_profile(current_user: User, db: AsyncSession) -> Landlord:
     result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
@@ -36,18 +33,9 @@ async def upload_id_copy(
 ):
     landlord = await get_landlord_profile(current_user, db)
 
-    if file.content_type not in ALLOWED_DOC_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and PDF files are allowed")
-
-    file_bytes = await file.read()
-    if len(file_bytes) > MAX_DOC_SIZE:
-        raise HTTPException(status_code=400, detail="File must be under 10MB")
-
-    blob_url = await upload_image(file_bytes, f"id_copy_{landlord.id}", file.content_type)
-    landlord.id_copy_url = blob_url
+    landlord.id_copy_url = await store_document_upload(file)
     await db.commit()
-
-    return {"detail": "ID copy uploaded successfully", "url": blob_url}
+    return {"detail": "ID copy uploaded successfully", "url": landlord_document_link(landlord.id, "id-copy", landlord.id_copy_url)}
 
 
 @router.post("/me/documents/proof-of-address", status_code=status.HTTP_200_OK)
@@ -58,18 +46,9 @@ async def upload_proof_of_address(
 ):
     landlord = await get_landlord_profile(current_user, db)
 
-    if file.content_type not in ALLOWED_DOC_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and PDF files are allowed")
-
-    file_bytes = await file.read()
-    if len(file_bytes) > MAX_DOC_SIZE:
-        raise HTTPException(status_code=400, detail="File must be under 10MB")
-
-    blob_url = await upload_image(file_bytes, f"proof_of_address_{landlord.id}", file.content_type)
-    landlord.proof_of_address_url = blob_url
+    landlord.proof_of_address_url = await store_document_upload(file)
     await db.commit()
-
-    return {"detail": "Proof of address uploaded successfully", "url": blob_url}
+    return {"detail": "Proof of address uploaded successfully", "url": landlord_document_link(landlord.id, "proof-of-address", landlord.proof_of_address_url)}
 
 
 @router.post("/me/verification/submit", status_code=status.HTTP_200_OK)
@@ -162,8 +141,8 @@ async def get_pending_landlords(
             "contact_phone": l.contact_phone,
             "id_number": id_number,
             "id_number_verified": l.id_number_verified,
-            "id_copy_url": l.id_copy_url,
-            "proof_of_address_url": l.proof_of_address_url,
+            "id_copy_url": landlord_document_link(l.id, "id-copy", l.id_copy_url),
+            "proof_of_address_url": landlord_document_link(l.id, "proof-of-address", l.proof_of_address_url),
             "verification_status": l.verification_status,
             "address": f"{l.address_line1}, {l.city}, {l.province}, {l.postal_code}" if l.address_line1 else None,
         })
