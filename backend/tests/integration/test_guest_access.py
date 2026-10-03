@@ -19,6 +19,7 @@ from app.api.v1.routes import accommodations, reviews
 from app.core.security import create_access_token, create_refresh_token
 from app.db.base import get_db
 from app.models.user import User
+from app.models.accommodation import Accommodation
 from app.models.review import Review, ReviewNLPResult, ReviewReply
 from app.models.student import Student
 from app.models.insight import AccommodationInsight
@@ -60,6 +61,8 @@ def discovery(monkeypatch):
             entities = [d.get("entity") for d in getattr(statement, "column_descriptions", [])]
             if User in entities:
                 return session.execute(statement)
+            if Accommodation in entities:
+                return Result(value=SimpleNamespace(id=1, status="approved", landlord_id=1))
             if Review in entities:
                 return Result(review_rows)
             if any(entity in entities for entity in (ReviewNLPResult, ReviewReply, Student)):

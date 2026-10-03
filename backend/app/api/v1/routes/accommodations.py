@@ -22,6 +22,7 @@ from app.services.cache_service import (
 )
 
 from app.services.guest_access import GUEST_SEARCH_PAGE_SIZE, search_response
+from app.services.resource_access import owned_accommodation, visible_accommodation
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
 
@@ -485,31 +486,11 @@ async def get_analytics(
     current_user: User = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
+    await owned_accommodation(db, accommodation_id, current_user)
     cache_key = key_analytics(accommodation_id)
     cached = await cache_get(cache_key)
-    if cached:
+    if cached is not None:
         return cached
-    
-    # 1. Verify landlord owns this listing
-    query = select(Landlord).where(Landlord.user_id == current_user.id)
-    result = await db.execute(query)
-    landlord = result.scalar_one_or_none()
-
-    if not landlord:
-        raise HTTPException(status_code=404, detail="Landlord profile not found")
-
-    query = select(Accommodation).where(
-        Accommodation.id == accommodation_id,
-        Accommodation.landlord_id == landlord.id
-    )
-    result = await db.execute(query)
-    accommodation = result.scalar_one_or_none()
-
-    if not accommodation:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Listing not found or does not belong to you"
-        )
 
     # 2. Total views
     query = select(func.count(AccommodationView.id)).where(
@@ -590,32 +571,26 @@ async def get_analytics(
 async def record_view(
     accommodation_id: int,
     request: Request,
+    current_user: User = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Record a listing view — increments Redis counter, flushed to DB at midnight."""
-    # Verify accommodation exists
-    result = await db.execute(
-        select(Accommodation).where(Accommodation.id == accommodation_id)
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Accommodation not found")
+    await visible_accommodation(db, accommodation_id, current_user)
 
     # Increment Redis counter
     await increment_view(accommodation_id)
 
 @router.get("/{accommodation_id}")
-async def get_accommodation(accommodation_id: int, db: AsyncSession = Depends(get_db)):
+async def get_accommodation(
+    accommodation_id: int,
+    current_user: User = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    accommodation = await visible_accommodation(db, accommodation_id, current_user)
     cache_key = key_listing(accommodation_id)
     cached = await cache_get(cache_key)
-    if cached:
-        return cached
-    # 1. Base accommodation
-    result = await db.execute(
-        select(Accommodation).where(Accommodation.id == accommodation_id)
-    )
-    accommodation = result.scalar_one_or_none()
-    if not accommodation:
-        raise HTTPException(status_code=404, detail="Accommodation not found")
+    if cached is not None:
+        return {**cached, "status": accommodation.status}
 
     # 2. Coordinates from PostGIS
     coords_result = await db.execute(
@@ -787,10 +762,7 @@ async def delete_accommodation_image(
     current_user: User = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
-    landlord = result.scalar_one_or_none()
-    if not landlord:
-        raise HTTPException(status_code=404, detail="Landlord profile not found")
+    await owned_accommodation(db, accommodation_id, current_user)
 
     result = await db.execute(
         select(AccommodationImage).where(
@@ -805,6 +777,9 @@ async def delete_accommodation_image(
     await delete_image(image.blob_url)
     await db.delete(image)
     await db.commit()
+    await cache_delete(key_listing(accommodation_id))
+    await cache_delete_pattern("search:*")
+    await cache_delete(key_featured())
 
     return {"detail": "Image deleted"}
 
@@ -857,6 +832,7 @@ async def get_accommodation_insights(
     db: AsyncSession = Depends(get_db)
 ):
     """Detailed insights require an active, verified authenticated account."""
+    await visible_accommodation(db, accommodation_id, current_user)
     result = await db.execute(
         select(AccommodationInsight).where(
             AccommodationInsight.accommodation_id == accommodation_id

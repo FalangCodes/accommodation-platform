@@ -17,6 +17,7 @@ from app.services.review_service import process_review_nlp
 from app.services.cache_service import cache_delete, cache_delete_pattern, key_listing, key_reviews, key_analytics, cache_get, cache_set, TTL_REVIEWS
 
 from app.services.guest_access import reviews_response
+from app.services.resource_access import visible_accommodation
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -190,6 +191,7 @@ async def get_reviews_for_accommodation(
     current_user: User = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
+    await visible_accommodation(db, accommodation_id, current_user)
     cache_key = key_reviews(accommodation_id)
     cached = await cache_get(cache_key)
     if cached is not None:

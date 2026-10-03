@@ -8,6 +8,8 @@ from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.student import Student
 from app.models.landlord import Landlord
+from app.models.accommodation import Accommodation
+from app.models.review import Review
 from app.models.moderation import Appeal, ModerationLog
 from app.schemas.moderation import AppealCreate, AppealOut
 
@@ -44,6 +46,37 @@ async def submit_appeal(
             detail="resource_type must be one of: review, listing, landlord.",
         )
 
+    # Ownership must be established before looking up actions or duplicates.
+    if body.resource_type == "review":
+        if current_user.role != "student":
+            raise HTTPException(status_code=403, detail="Only the review author can appeal this review.")
+        result = await db.execute(select(Student).where(Student.user_id == current_user.id))
+        student = result.scalar_one_or_none()
+        if not student:
+            raise HTTPException(status_code=404, detail="Student profile not found")
+        result = await db.execute(select(Review).where(
+            Review.id == body.resource_id, Review.student_id == student.id,
+        ))
+    else:
+        if current_user.role != "landlord":
+            raise HTTPException(status_code=403, detail="Only the owning landlord can appeal this item.")
+        result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
+        landlord = result.scalar_one_or_none()
+        if not landlord:
+            raise HTTPException(status_code=404, detail="Landlord profile not found")
+        if body.resource_type == "listing":
+            result = await db.execute(select(Accommodation).where(
+                Accommodation.id == body.resource_id, Accommodation.landlord_id == landlord.id,
+            ))
+        else:
+            result = await db.execute(select(Landlord).where(
+                Landlord.id == body.resource_id, Landlord.user_id == current_user.id,
+            ))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Appealable item not found")
+
+    lookup_type = "accommodation" if body.resource_type == "listing" else body.resource_type
+
     # Resolve the moderation log entry — use provided ID or look up the latest one
     if body.original_action_id is not None:
         log_result = await db.execute(
@@ -55,6 +88,8 @@ async def submit_appeal(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="The referenced moderation action was not found.",
             )
+        if log_entry.resource_type != lookup_type or log_entry.resource_id != body.resource_id:
+            raise HTTPException(status_code=422, detail="The moderation action does not match this item.")
         resolved_action_id = log_entry.id
     else:
         # Auto-resolve: find the most recent log entry for this resource
