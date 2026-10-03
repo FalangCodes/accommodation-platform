@@ -173,7 +173,7 @@ function StatCard({ label, value, icon: Icon, sub }: { label: string; value: str
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab() {
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading } = useQuery<Stats>({
     queryKey: ["admin-stats"],
     queryFn: () => adminApi.getStats().then(r => r.data),
   });
@@ -1030,7 +1030,7 @@ function ReportDetailView({ reportId, onBack }: { reportId: number; onBack: () =
                     <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip
                       contentStyle={{ background: "#1e293b", border: "none", borderRadius: "8px", fontSize: "12px", color: "#f8fafc" }}
-                      formatter={(value: number) => [value, "Views"]}
+                      formatter={(value) => [value ?? 0, "Views"]}
                     />
                     <Line type="monotone" dataKey="views" stroke="#1e293b" strokeWidth={2} dot={{ fill: "#1e293b", r: 3 }} activeDot={{ r: 5 }} />
                   </LineChart>

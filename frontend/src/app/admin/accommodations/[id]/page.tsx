@@ -500,7 +500,7 @@ const handleGenerateReport = async () => {
                           }}
                           itemStyle={{ color: "#f8fafc" }}
                           labelStyle={{ color: "#94a3b8", marginBottom: "2px" }}
-                          formatter={(value: number) => [value, "Views"]}
+                          formatter={(value) => [value ?? 0, "Views"]}
                         />
                         <Line
                           type="monotone"
