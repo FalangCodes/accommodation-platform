@@ -3,7 +3,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 from test_resource_permissions import resources
-from app.api.v1.routes import documents
+from app.api.v1.routes import documents, landlords
 from app.models.landlord import Landlord
 from app.models.user import User
 
@@ -13,6 +13,7 @@ REFERENCE = "https://storage.blob.core.windows.net/verification-documents/privat
 @pytest.fixture
 def private_documents(resources, monkeypatch):
     app, headers, listing, cache, effects, session = resources
+    app.include_router(landlords.router, prefix="/api/v1")
     app.include_router(documents.router, prefix="/api/v1")
     landlord = session.execute(select(Landlord).where(Landlord.id == 1)).scalar_one()
     landlord.id_copy_url = landlord.proof_of_address_url = REFERENCE
