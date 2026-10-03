@@ -14,6 +14,7 @@ from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
 from app.services.report_service import run_monthly_auto_reports
 from app.models.review import Review
+from app.core.config import settings
 import app.db.models
 
 scheduler = AsyncIOScheduler()
@@ -93,6 +94,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        settings.FRONTEND_URL.rstrip("/"),
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://40.123.252.250:3000",
