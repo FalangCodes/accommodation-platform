@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from typing import List
 import hashlib
 from app.db.base import get_db
-from app.core.dependencies import get_current_landlord, get_optional_user
+from app.core.dependencies import get_current_landlord, get_optional_user, get_current_user
 from app.models.user import User
 from app.models.landlord import Landlord
 from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
@@ -20,6 +20,8 @@ from app.services.cache_service import (
     key_platform_stats, key_featured, key_activity,
     TTL_SEARCH, TTL_LISTING, TTL_REVIEWS, TTL_ANALYTICS, TTL_FEATURED, TTL_ACTIVITY
 )
+
+from app.services.guest_access import GUEST_SEARCH_PAGE_SIZE, search_response
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
 
@@ -118,13 +120,14 @@ async def search_accommodations(
             detail="Authentication required to view page 2 and beyond."
         )
 
-    cache_key = key_search(university_id, radius_km, price_min, price_max, min_rating, gender_policy, funding_type, page, q=q)
+    page_size = min(max(1, page_size), 50) if current_user else GUEST_SEARCH_PAGE_SIZE
+    cache_key = key_search(
+        university_id, radius_km, price_min, price_max, min_rating,
+        page=page, gender_policy=gender_policy, funding_type=funding_type, q=q,
+    ) + f":size:{page_size}"
     cached = await cache_get(cache_key)
-    if cached:
-        return cached
-    
-    page = max(1, page)
-    page_size = min(max(1, page_size), 50)
+    if cached is not None:
+        return search_response(cached, current_user is not None)
     offset = (page - 1) * page_size
     params: dict = {}
 
@@ -158,7 +161,7 @@ async def search_accommodations(
                      a.address, a.price_min, a.price_max, a.status, a.created_at,
                      a.location, u.campus_location
         """
-        order_by = "ORDER BY ST_Distance(a.location, u.campus_location)"
+        order_by = "ORDER BY ST_Distance(a.location, u.campus_location), a.id"
         params["university_id"] = university_id
         params["radius_meters"] = radius_km * 1000
     else:
@@ -183,7 +186,7 @@ async def search_accommodations(
                      a.address, a.price_min, a.price_max, a.status, a.created_at,
                      a.location
         """
-        order_by = "ORDER BY a.created_at DESC"
+        order_by = "ORDER BY a.created_at DESC, a.id DESC"
 
     # Optional filters
     filter_clauses = []
@@ -243,7 +246,7 @@ async def search_accommodations(
     }
 
     await cache_set(cache_key, result_data, TTL_SEARCH)
-    return result_data
+    return search_response(result_data, current_user is not None)
 
 @router.get("/my")
 
@@ -850,9 +853,10 @@ async def upload_ownership_document(
 @router.get("/{accommodation_id}/insights")
 async def get_accommodation_insights(
     accommodation_id: int,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Public endpoint — returns student-filtered insights + landlord full view based on auth."""
+    """Detailed insights require an active, verified authenticated account."""
     result = await db.execute(
         select(AccommodationInsight).where(
             AccommodationInsight.accommodation_id == accommodation_id

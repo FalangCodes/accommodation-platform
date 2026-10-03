@@ -78,6 +78,7 @@ interface SearchResponse {
   total: number;
   page: number;
   page_size: number;
+  locked_count?: number;
 }
 
 interface MapItem {
@@ -541,7 +542,7 @@ interface Filters {
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isStudent, isLandlord } = useAuth();
+  const { user, loading: authLoading, isStudent, isLandlord } = useAuth();
   const isGuest = !user;
 
 
@@ -601,32 +602,27 @@ function SearchPageInner() {
   isError,
   isFetching,
 } = useQuery<SearchResponse>({
-  queryKey: ["accommodations-search", appliedFilters, page],
+  queryKey: ["accommodations-search", appliedFilters, page, user?.id ?? "guest"],
   queryFn: () => fetchAccommodations({ ...appliedFilters, page }),
-  placeholderData: (previousData) => previousData,
+  enabled: !authLoading && (!isGuest || page === 1),
 });
 
   // Redirect guests to login if they try to access page 2+
   useEffect(() => {
-    if (isGuest && page > 1) {
+    if (!authLoading && isGuest && page > 1) {
       router.push(`/login?redirect=${encodeURIComponent(currentUrl)}`);
     }
-  }, [isGuest, page]);
+  }, [authLoading, isGuest, page, router, currentUrl]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [page]);
 
-  const items = results?.items ?? [];
+  const allItems = results?.items ?? [];
+  const items = isGuest ? allItems.slice(0, PAGE_SIZE - BLUR_LAST_N) : allItems;
+  const lockedCount = isGuest ? (results?.locked_count ?? Math.max(0, allItems.length - items.length)) : 0;
   const total = results?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
-
-  // Which cards on page 1 are blurred for guests
-  const getCardBlurred = (index: number) => {
-    if (!isGuest) return false;
-    if (page > 1) return true; // shouldn't reach here due to redirect
-    return index >= PAGE_SIZE - BLUR_LAST_N;
-  };
 
   const handleApplyFilters = () => {
     setAppliedFilters(filters);
@@ -788,13 +784,20 @@ function SearchPageInner() {
                     <ListingCard
                       key={item.id}
                       item={item}
-                      blurred={getCardBlurred(index)}
+                      blurred={false}
                       index={index}
                     />
                   ))}
 
-                  {/* Guest gate banner after blurred cards */}
-                  {isGuest && page === 1 && items.length >= PAGE_SIZE - BLUR_LAST_N && (
+                  {Array.from({ length: lockedCount }, (_, index) => (
+                    <div key={`locked-${index}`} className="rounded-2xl border border-slate-200 bg-slate-100 min-h-80 flex flex-col items-center justify-center gap-3">
+                      <Lock className="w-7 h-7 text-slate-500" />
+                      <p className="text-sm font-semibold text-slate-600">Sign in to view this listing</p>
+                    </div>
+                  ))}
+
+                  {/* Guest gate banner after locked placeholders */}
+                  {isGuest && page === 1 && (lockedCount > 0 || total > items.length) && (
                     <GuestGateBanner returnUrl={currentUrl} />
                   )}
                 </div>

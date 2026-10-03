@@ -144,9 +144,16 @@ async function fetchListing(id: string): Promise<ListingDetail> {
   return data;
 }
 
-async function fetchReviews(id: string): Promise<Review[]> {
+interface ReviewPreview {
+  items: Review[];
+  total: number;
+  locked_count: number;
+}
+
+async function fetchReviews(id: string): Promise<ReviewPreview> {
   const { data } = await api.get(`/api/v1/reviews/accommodation/${id}`);
-  return data;
+  // Support the previous response during the frontend/backend deployment handover.
+  return Array.isArray(data) ? { items: data, total: data.length, locked_count: 0 } : data;
 }
 
 // ─── Write Review Modal ───────────────────────────────────────────────────────
@@ -546,7 +553,7 @@ function PhotoGrid({ images }: { images: { url: string }[] }) {
 export default function ListingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user, isModerator, isAdmin } = useAuth();
+  const { user, loading: authLoading, isModerator, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const isGuest = !user;
   const canModerate = isModerator || isAdmin;
@@ -565,11 +572,14 @@ export default function ListingDetailPage() {
     queryFn: () => fetchListing(id),
   });
 
-  const { data: reviews = [], isLoading: reviewsLoading } = useQuery({
-    queryKey: ["reviews", id],
+  const { data: reviewPreview, isLoading: reviewsLoading } = useQuery({
+    queryKey: ["reviews", id, user?.id ?? "guest"],
     queryFn: () => fetchReviews(id),
-    enabled: activeTab === "reviews",
+    enabled: !authLoading && activeTab === "reviews",
   });
+
+  const reviews = isGuest ? (reviewPreview?.items ?? []).slice(0, 2) : (reviewPreview?.items ?? []);
+  const lockedReviewCount = isGuest ? Math.max(0, (reviewPreview?.total ?? 0) - reviews.length) : 0;
 
   const handleReviewSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ["reviews", id] });
@@ -621,12 +631,12 @@ export default function ListingDetailPage() {
   };
 
   const { data: insights } = useQuery({
-    queryKey: ["listing-insights", id],
+    queryKey: ["listing-insights", id, user?.id ?? "guest"],
     queryFn: async () => {
       const { data } = await api.get(`/api/v1/accommodations/${id}/insights`);
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && !authLoading && !isGuest,
   });
 
   // Fire view once on mount
@@ -860,16 +870,16 @@ export default function ListingDetailPage() {
                       <p className="text-slate-500 text-sm">No reviews yet. Be the first!</p>
                     </div>
                   ) : (
-                    reviews.map((review, index) => (
-                      <ReviewCard key={review.id} review={review} blurred={isGuest && index >= 2} />
+                    reviews.map((review) => (
+                      <ReviewCard key={review.id} review={review} blurred={false} />
                     ))
                   )}
 
-                  {isGuest && reviews.length > 2 && (
+                  {isGuest && lockedReviewCount > 0 && (
                     <div className="bg-slate-900 rounded-2xl p-6 text-center">
                       <Lock className="w-6 h-6 text-white mx-auto mb-2" />
                       <p className="text-white font-semibold mb-1">
-                        {reviews.length - 2} more review{reviews.length - 2 !== 1 ? "s" : ""}
+                        {lockedReviewCount} more review{lockedReviewCount !== 1 ? "s" : ""}
                       </p>
                       <p className="text-slate-300 text-sm mb-4">Sign in to read all reviews</p>
                       <Button asChild className="bg-white text-slate-900 hover:bg-slate-100 rounded-xl">

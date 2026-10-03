@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from app.db.base import get_db, AsyncSessionLocal
-from app.core.dependencies import get_current_student, get_current_moderator
+from app.core.dependencies import get_current_student, get_current_moderator, get_optional_user
 from app.models.user import User
 from app.models.student import Student
 from app.models.accommodation import Accommodation
@@ -15,6 +15,8 @@ from app.models.review import Review, ReviewReply, ReviewNLPResult
 from app.schemas.review import ReviewCreate, ReviewResponse, ReviewReplyCreate, ReviewReplyResponse
 from app.services.review_service import process_review_nlp
 from app.services.cache_service import cache_delete, cache_delete_pattern, key_listing, key_reviews, key_analytics, cache_get, cache_set, TTL_REVIEWS
+
+from app.services.guest_access import reviews_response
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -185,23 +187,24 @@ async def get_flagged_reviews(
 @router.get("/accommodation/{accommodation_id}")
 async def get_reviews_for_accommodation(
     accommodation_id: int,
+    current_user: User = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
     cache_key = key_reviews(accommodation_id)
     cached = await cache_get(cache_key)
-    if cached:
-        return cached
+    if cached is not None:
+        return reviews_response(cached, current_user is not None)
     result = await db.execute(
         select(Review).where(
             Review.accommodation_id == accommodation_id,
             Review.deleted_at == None,
             Review.status.in_(["analysed", "released"])
-        ).order_by(Review.created_at.desc())
+        ).order_by(Review.created_at.desc(), Review.id.desc())
     )
     reviews = result.scalars().all()
 
     if not reviews:
-        return []
+        return reviews_response([], current_user is not None)
 
     review_ids = [r.id for r in reviews]
     student_ids = [r.student_id for r in reviews]
@@ -256,7 +259,7 @@ async def get_reviews_for_accommodation(
         })
 
     await cache_set(cache_key, output, TTL_REVIEWS)
-    return output
+    return reviews_response(output, current_user is not None)
 
 
 @router.delete("/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
