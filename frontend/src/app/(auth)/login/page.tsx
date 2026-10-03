@@ -103,6 +103,10 @@ function LoginForm() {
             "Sign in"
           )}
         </Button>
+        <div className="flex justify-between gap-3 text-sm text-[#1F4E79]">
+          <Link href="/forgot-password" className="hover:underline">Forgot password?</Link>
+          <Link href={`/verify-email?email=${encodeURIComponent(email)}`} className="hover:underline">Verify email</Link>
+        </div>
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">

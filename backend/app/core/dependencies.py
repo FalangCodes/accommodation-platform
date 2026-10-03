@@ -9,6 +9,15 @@ from app.models.user import User
 
 bearer_scheme = HTTPBearer()
 
+
+def ensure_account_access(user: User, payload: dict | None = None) -> None:
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Your account is inactive. Contact the administrator.")
+    if user.role == "student" and user.email_verified_at is None:
+        raise HTTPException(status_code=403, detail="Verify your institutional email before signing in.")
+    if payload is not None and payload.get("ver", 0) != user.token_version:
+        raise HTTPException(status_code=401, detail="Your session has expired. Sign in again.")
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db)
@@ -32,7 +41,11 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    query = select(User).where(User.id == int(payload["sub"]))
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    query = select(User).where(User.id == user_id)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
@@ -42,6 +55,7 @@ async def get_current_user(
             detail="User no longer exists"
         )
 
+    ensure_account_access(user, payload)
     return user
 
 
@@ -61,7 +75,10 @@ async def get_optional_user(
             return None
         query = select(User).where(User.id == int(payload["sub"]))
         result = await db.execute(query)
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if user:
+            ensure_account_access(user, payload)
+        return user
     except Exception:
         return None
 

@@ -17,9 +17,17 @@ class Settings(BaseSettings):
     AZURE_STORAGE_CONTAINER_NAME: str = "listing-images"
     ENCRYPTION_KEY: str = "U--coEBDscfXIuKRUdRLHoUCeV31NAkLxqI2FmIhLPc="
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    FRONTEND_URL: str = "http://localhost:3000"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+    SMTP_SSL: bool = False
 
     class Config:
         env_file = ".env"
         case_sensitive = True
 
-settings = Settings()
+settings = Settings()

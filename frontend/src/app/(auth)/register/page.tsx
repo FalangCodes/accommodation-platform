@@ -60,6 +60,9 @@ function RegisterForm() {
           last_name: lastName,
           student_number: studentNumber,
         });
+        toast.success("Account created. Check your email to verify it.");
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
       } else {
         await authApi.registerLandlord({
           email,

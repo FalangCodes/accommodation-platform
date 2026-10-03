@@ -15,6 +15,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  clearSession: () => void;
   isStudent: boolean;
   isLandlord: boolean;
   isModerator: boolean;
@@ -50,10 +51,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(me.data);
   };
 
-  const logout = () => {
+  const clearSession = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     setUser(null);
+  };
+
+  const logout = () => {
+    clearSession();
     window.location.href = "/";
   };
 
@@ -63,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       login,
       logout,
+      clearSession,
       isStudent: user?.role === "student",
       isLandlord: user?.role === "landlord",
       isModerator: user?.role === "moderator" || user?.role === "admin",

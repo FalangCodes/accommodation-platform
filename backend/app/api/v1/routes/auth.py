@@ -1,16 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 from app.core.encryption import encrypt_value
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, get_password_hash
 from app.db.base import get_db
 from app.models.user import User
 from app.models.student import Student
 from app.models.university import University
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, ensure_account_access
 from app.models.landlord import Landlord
 from app.schemas.auth import LoginRequest, RefreshRequest, StudentCreate, LandlordCreate, LandlordVerificationSubmit, UserResponse, tokenResponse, ModeratorCreate
 from app.core.config import settings
+from app.schemas.auth import AuthEmailRequest, EmailTokenRequest, ResetPasswordRequest
+from app.services.auth_email_service import issue_email_token, consume_email_token, now
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -21,13 +27,13 @@ async def get_me(current_user: User = Depends(get_current_user)):
 @router.post("/register/student", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_student(student_in: StudentCreate, db: AsyncSession = Depends(get_db)):
 
-    query = select(User).where(User.email == student_in.email)
+    query = select(User).where(func.lower(User.email) == student_in.email)
     result = await db.execute(query)
     if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists.")
 
     domain = student_in.email.split('@')[1]
-    uni_query = select(University).where(University.domain == domain)
+    uni_query = select(University.id).where(University.domain == domain)
     uni_result = await db.execute(uni_query)
     university = uni_result.scalar_one_or_none()
 
@@ -38,20 +44,26 @@ async def register_student(student_in: StudentCreate, db: AsyncSession = Depends
         email=student_in.email,
         password_hash=get_password_hash(student_in.password),
         role="student",
-        is_active=False
+        is_active=True  # Email verification is an independent access requirement.
     )
     db.add(new_user)
     await db.flush()
 
     new_student = Student(
         user_id=new_user.id,
-        university_id=university.id,
+        university_id=university,
         first_name=student_in.first_name,
         last_name=student_in.last_name,
         student_number=student_in.student_number,
-        verification_tier=1
+        verification_tier=0
     )
     db.add(new_student)
+    try:
+        await issue_email_token(db, new_user, "verify_email")
+    except Exception:
+        await db.rollback()
+        logger.error("Registration verification email delivery failed")
+        raise HTTPException(status_code=503, detail="We could not send the verification email. Please try registering again shortly.")
     await db.commit()
     await db.refresh(new_user)
 
@@ -61,7 +73,7 @@ async def register_student(student_in: StudentCreate, db: AsyncSession = Depends
 async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
     
     # 1. Find the user
-    query = select(User).where(User.email == credentials.email)
+    query = select(User).where(func.lower(User.email) == str(credentials.email).lower())
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
@@ -72,9 +84,10 @@ async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Incorrect email or password"
         )
 
+    ensure_account_access(user)
     # 3. Issue tokens
-    access_token = create_access_token(subject=user.id)
-    refresh_token = create_refresh_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, token_version=user.token_version)
+    refresh_token = create_refresh_token(subject=user.id, token_version=user.token_version)
 
     return tokenResponse(
         access_token=access_token,
@@ -102,7 +115,11 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
         )
 
     # 3. Confirm user still exists and is active
-    query = select(User).where(User.id == int(token_data["sub"]))
+    try:
+        user_id = int(token_data["sub"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    query = select(User).where(User.id == user_id)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
@@ -112,9 +129,10 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
             detail="User not found or inactive"
         )
 
+    ensure_account_access(user, token_data)
     # 4. Issue fresh tokens
-    access_token = create_access_token(subject=user.id)
-    new_refresh_token = create_refresh_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, token_version=user.token_version)
+    new_refresh_token = create_refresh_token(subject=user.id, token_version=user.token_version)
 
     return tokenResponse(
         access_token=access_token,
@@ -123,10 +141,59 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
 
 from app.core.encryption import encrypt_value
 
+
+@router.post("/resend-verification")
+async def resend_verification(payload: AuthEmailRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(func.lower(User.email) == payload.email))
+    user = result.scalar_one_or_none()
+    if user and user.role == "student" and user.email_verified_at is None:
+        try:
+            await issue_email_token(db, user, "verify_email")
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.error("Verification email delivery failed")
+    return {"message": "If an unverified student account exists, a verification email will be sent. Please wait at least a minute before requesting another."}
+
+
+@router.post("/verify-email")
+async def verify_email(payload: EmailTokenRequest, db: AsyncSession = Depends(get_db)):
+    user = await consume_email_token(db, payload.token, "verify_email")
+    user.email_verified_at = now()
+    result = await db.execute(select(Student).where(Student.user_id == user.id))
+    student = result.scalar_one_or_none()
+    if student:
+        student.verification_tier = 1
+    await db.commit()
+    return {"message": "Your email is verified. You can now sign in if your account is active."}
+
+
+@router.post("/request-password-reset")
+async def request_password_reset(payload: AuthEmailRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(func.lower(User.email) == payload.email))
+    user = result.scalar_one_or_none()
+    if user:
+        try:
+            await issue_email_token(db, user, "reset_password")
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.error("Password reset email delivery failed")
+    return {"message": "If an account exists, a password reset email will be sent. Please wait at least a minute before requesting another."}
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    user = await consume_email_token(db, payload.token, "reset_password")
+    user.password_hash = get_password_hash(payload.password)
+    user.token_version += 1
+    await db.commit()
+    return {"message": "Your password has been reset. Sign in with your new password."}
+
 @router.post("/register/landlord", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_landlord(landlord_in: LandlordCreate, db: AsyncSession = Depends(get_db)):
 
-    query = select(User).where(User.email == landlord_in.email)
+    query = select(User).where(func.lower(User.email) == landlord_in.email)
     result = await db.execute(query)
     if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists.")

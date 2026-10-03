@@ -2,6 +2,9 @@ import axios from "axios";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://40.123.252.250:8000";
 
+// Public authentication requests should not trigger session refresh or redirects.
+const publicAuthApi = axios.create({ baseURL: API_BASE_URL });
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -40,7 +43,10 @@ api.interceptors.response.use(
       } catch {
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
-        window.location.href = "/login";
+        const publicAuthPaths = ["/login", "/register", "/verify-email", "/forgot-password", "/reset-password"];
+        if (!publicAuthPaths.includes(window.location.pathname)) {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);
@@ -55,7 +61,7 @@ export const authApi = {
   first_name: string;
   last_name: string;
   student_number: string;
-  }) => api.post("/api/v1/auth/register/student", data),
+  }) => publicAuthApi.post("/api/v1/auth/register/student", data),
 
   registerLandlord: (data: {
     email: string;
@@ -70,10 +76,15 @@ export const authApi = {
     city: string;
     province: string;
     postal_code: string;
-  }) => api.post("/api/v1/auth/register/landlord", data),
+  }) => publicAuthApi.post("/api/v1/auth/register/landlord", data),
 
   login: (data: { email: string; password: string }) =>
-    api.post("/api/v1/auth/login", data),
+    publicAuthApi.post("/api/v1/auth/login", data),
+
+  resendVerification: (email: string) => publicAuthApi.post("/api/v1/auth/resend-verification", { email }),
+  verifyEmail: (token: string) => publicAuthApi.post("/api/v1/auth/verify-email", { token }),
+  requestPasswordReset: (email: string) => publicAuthApi.post("/api/v1/auth/request-password-reset", { email }),
+  resetPassword: (token: string, password: string) => publicAuthApi.post("/api/v1/auth/reset-password", { token, password }),
 
   me: () => api.get("/api/v1/auth/me"),
 };
