@@ -18,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.db.models  # Register relationship targets.
 from app.api.v1.routes.auth import router
+from app.api.v1.routes.admin import router as admin_router
 from app.core.dependencies import get_optional_user
 from app.core.security import create_access_token, create_refresh_token, get_password_hash
 from app.db.base import get_db
@@ -69,6 +70,7 @@ def setup(monkeypatch):
     monkeypatch.setattr(auth_email_service, "send_auth_email", capture)
     application = FastAPI()
     application.include_router(router, prefix="/api/v1")
+    application.include_router(admin_router, prefix="/api/v1")
 
     async def isolated_db():
         try:
@@ -279,3 +281,101 @@ async def test_invalid_token_and_password_validation(client, endpoint):
     assert (await client.post(f"/api/v1/auth/{endpoint}", json={"token": "short", "password": "NewPassword123!"})).status_code == 422
     if endpoint == "reset-password":
         assert (await client.post(f"/api/v1/auth/{endpoint}", json={"token": "x" * 43, "password": "short"})).status_code == 422
+
+
+def administrator_headers(session, target):
+    admin = User(email="admin@example.com", password_hash=target.password_hash, role="admin", is_active=True)
+    session.add(admin)
+    session.commit()
+    return {"Authorization": f"Bearer {create_access_token(admin.id)}"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["student", "landlord", "moderator"])
+async def test_deactivation_and_reactivation_never_restore_old_sessions(client, setup, role):
+    user = create_user(setup[1], role=role)
+    admin_headers = administrator_headers(setup[1], user)
+    tokens = (await client.post("/api/v1/auth/login", json=STUDENT)).json()
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert (await client.patch(f"/api/v1/admin/users/{user.id}/deactivate", headers=admin_headers)).status_code == 200
+    assert not user.is_active and user.token_version == 1
+    for response in [
+        await client.post("/api/v1/auth/login", json=STUDENT),
+        await client.get("/api/v1/auth/me", headers=headers),
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}),
+    ]:
+        assert response.status_code == 403
+        assert response.headers["x-auth-error"] == "account_inactive"
+    assert (await client.get("/optional-user", headers=headers)).json()["user_id"] is None
+    assert (await client.patch(f"/api/v1/admin/users/{user.id}/deactivate", headers=admin_headers)).status_code == 200
+    assert user.token_version == 1  # Retrying the same status change is harmless.
+    assert (await client.patch(f"/api/v1/admin/users/{user.id}/activate", headers=admin_headers)).status_code == 200
+    assert user.is_active and user.token_version == 2
+    for response in [
+        await client.get("/api/v1/auth/me", headers=headers),
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}),
+    ]:
+        assert response.status_code == 401
+        assert response.headers["x-auth-error"] == "session_revoked"
+    assert (await client.get("/optional-user", headers=headers)).json()["user_id"] is None
+    fresh = await client.post("/api/v1/auth/login", json=STUDENT)
+    assert fresh.status_code == 200
+    assert (await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {fresh.json()['access_token']}"})).status_code == 200
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": fresh.json()["refresh_token"]})).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["student", "landlord", "moderator", "admin"])
+async def test_inactive_accounts_blocked_in_all_auth_paths(client, setup, role):
+    user = create_user(setup[1], role=role, active=False)
+    headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    for response in [
+        await client.post("/api/v1/auth/login", json=STUDENT),
+        await client.get("/api/v1/auth/me", headers=headers),
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": create_refresh_token(user.id)}),
+    ]:
+        assert response.status_code == 403 and response.headers["x-auth-error"] == "account_inactive"
+    assert (await client.get("/optional-user", headers=headers)).json()["user_id"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["student", "landlord", "moderator"])
+async def test_status_changes_require_administrator(client, setup, role):
+    user = create_user(setup[1], role=role)
+    headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    for action in ["activate", "deactivate"]:
+        response = await client.patch(f"/api/v1/admin/users/{user.id}/{action}", headers=headers)
+        assert response.status_code == 403
+        assert "x-auth-error" not in response.headers  # Permission errors do not end sessions.
+    assert user.is_active and user.token_version == 0
+
+
+@pytest.mark.asyncio
+async def test_admin_account_deactivation_protection_remains(client, setup):
+    user = create_user(setup[1], role="admin")
+    headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    response = await client.patch(f"/api/v1/admin/users/{user.id}/deactivate", headers=headers)
+    assert response.status_code == 400
+    assert user.is_active and user.token_version == 0
+
+
+@pytest.mark.asyncio
+async def test_legacy_inactive_account_tokens_revoked_on_activation(client, setup):
+    user = create_user(setup[1], active=False)
+    headers = administrator_headers(setup[1], user)
+    old_access = create_access_token(user.id)
+    old_refresh = create_refresh_token(user.id)
+    assert (await client.patch(f"/api/v1/admin/users/{user.id}/activate", headers=headers)).status_code == 200
+    assert user.token_version == 1
+    assert (await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {old_access}"})).status_code == 401
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_activation_does_not_verify_student_email(client, setup):
+    user = create_user(setup[1], verified=False, active=False)
+    headers = administrator_headers(setup[1], user)
+    assert (await client.patch(f"/api/v1/admin/users/{user.id}/activate", headers=headers)).status_code == 200
+    assert user.is_active and user.email_verified_at is None
+    response = await client.post("/api/v1/auth/login", json=STUDENT)
+    assert response.status_code == 403 and response.headers["x-auth-error"] == "email_unverified"

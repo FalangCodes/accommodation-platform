@@ -1,4 +1,5 @@
 import axios from "axios";
+import { endSession } from "./session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://40.123.252.250:8000";
 
@@ -24,28 +25,47 @@ api.interceptors.request.use((config) => {
 });
 
 // Auto refresh token on 401
+let refreshInFlight: Promise<string> | null = null;
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    const failure = error.response?.headers?.["x-auth-error"];
+    if (failure === "account_inactive" || failure === "email_unverified" || failure === "session_revoked") {
+      endSession(failure === "session_revoked" ? "session_expired" : failure);
+      return Promise.reject(error);
+    }
+    if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true;
+      const refreshToken = localStorage.getItem("refresh_token");
       try {
-        const refresh_token = localStorage.getItem("refresh_token");
-        if (!refresh_token) throw new Error("No refresh token");
-        const res = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
-          refresh_token,
-        });
-        localStorage.setItem("access_token", res.data.access_token);
-        localStorage.setItem("refresh_token", res.data.refresh_token);
-        original.headers.Authorization = `Bearer ${res.data.access_token}`;
+        if (!refreshToken) throw new Error("No refresh token");
+        if (!refreshInFlight) {
+          refreshInFlight = axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
+            refresh_token: refreshToken,
+          }).then((res) => {
+            // A pending refresh must never restore a cleared or replaced session.
+            if (localStorage.getItem("refresh_token") !== refreshToken) {
+              throw new Error("Session changed during refresh");
+            }
+            localStorage.setItem("access_token", res.data.access_token);
+            localStorage.setItem("refresh_token", res.data.refresh_token);
+            return res.data.access_token as string;
+          }).finally(() => { refreshInFlight = null; });
+        }
+        const accessToken = await refreshInFlight;
+        if (localStorage.getItem("access_token") !== accessToken) {
+          throw new Error("Session ended during refresh");
+        }
+        original.headers.Authorization = `Bearer ${accessToken}`;
         return api(original);
-      } catch {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        const publicAuthPaths = ["/login", "/register", "/verify-email", "/forgot-password", "/reset-password"];
-        if (!publicAuthPaths.includes(window.location.pathname)) {
-          window.location.href = "/login";
+      } catch (refreshError: unknown) {
+        if (localStorage.getItem("refresh_token") === refreshToken) {
+          const refreshFailure = axios.isAxiosError(refreshError)
+            ? refreshError.response?.headers?.["x-auth-error"] : undefined;
+          endSession(refreshFailure === "account_inactive" || refreshFailure === "email_unverified"
+            ? refreshFailure : "session_expired");
         }
       }
     }

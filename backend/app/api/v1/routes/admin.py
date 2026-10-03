@@ -452,14 +452,16 @@ async def deactivate_user(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == "admin":
         raise HTTPException(status_code=400, detail="Cannot deactivate an admin account")
 
-    user.is_active = False
+    if user.is_active:
+        user.is_active = False
+        user.token_version += 1
     await db.commit()
 
     return {"detail": f"User {user.email} deactivated", "user_id": user_id}
@@ -471,12 +473,15 @@ async def activate_user(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user.is_active = True
+    if not user.is_active:
+        user.is_active = True
+        # Also revoke tokens issued before legacy inactive accounts were blocked.
+        user.token_version += 1
     await db.commit()
 
     return {"detail": f"User {user.email} activated", "user_id": user_id}

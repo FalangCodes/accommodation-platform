@@ -12,11 +12,11 @@ bearer_scheme = HTTPBearer()
 
 def ensure_account_access(user: User, payload: dict | None = None) -> None:
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Your account is inactive. Contact the administrator.")
+        raise HTTPException(status_code=403, detail="Your account is inactive. Contact the administrator.", headers={"X-Auth-Error": "account_inactive"})
     if user.role == "student" and user.email_verified_at is None:
-        raise HTTPException(status_code=403, detail="Verify your institutional email before signing in.")
+        raise HTTPException(status_code=403, detail="Verify your institutional email before signing in.", headers={"X-Auth-Error": "email_unverified"})
     if payload is not None and payload.get("ver", 0) != user.token_version:
-        raise HTTPException(status_code=401, detail="Your session has expired. Sign in again.")
+        raise HTTPException(status_code=401, detail="Your session has expired. Sign in again.", headers={"X-Auth-Error": "session_revoked"})
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),

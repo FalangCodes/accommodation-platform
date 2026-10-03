@@ -102,6 +102,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Auth-Error"],
 )
 
 app.include_router(auth.router, prefix="/api/v1")

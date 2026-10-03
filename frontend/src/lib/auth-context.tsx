@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { authApi } from "./api";
+import { SESSION_ENDED_EVENT } from "./session";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface User {
   id: number;
@@ -25,22 +27,56 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const clear = () => {
+      setUser(null);
+      queryClient.clear();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if ((event.key === "access_token" || event.key === null) && !localStorage.getItem("access_token")) clear();
+    };
+    window.addEventListener(SESSION_ENDED_EVENT, clear);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(SESSION_ENDED_EVENT, clear);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [queryClient]);
+
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    const check = () => {
+      if (document.visibilityState === "visible" && localStorage.getItem("access_token")) {
+        void authApi.me().catch(() => {});
+      }
+    };
+    const timer = window.setInterval(check, 60_000);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [userId]);
+
+  useEffect(() => {
     const token = localStorage.getItem("access_token");
-    if (token) {
-      authApi.me()
-        .then((res) => setUser(res.data))
+    const request = token ? authApi.me() : Promise.resolve(null);
+    request
+        .then((res) => {
+          if (res && localStorage.getItem("access_token")) setUser(res.data);
+        })
         .catch(() => {
           localStorage.removeItem("access_token");
           localStorage.removeItem("refresh_token");
         })
         .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -48,13 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("access_token", res.data.access_token);
     localStorage.setItem("refresh_token", res.data.refresh_token);
     const me = await authApi.me();
-    setUser(me.data);
+    if (localStorage.getItem("access_token")) setUser(me.data);
   };
 
   const clearSession = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     setUser(null);
+    queryClient.clear();
   };
 
   const logout = () => {

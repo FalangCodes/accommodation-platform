@@ -15,6 +15,10 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/";
   const { login } = useAuth();
+  const reason = searchParams.get("reason");
+  const sessionMessage = reason === "account_inactive" ? "Your account is inactive. Contact the administrator."
+    : reason === "email_unverified" ? "Verify your institutional email before signing in."
+    : reason === "session_expired" ? "Your session has ended. Please sign in again." : "";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,9 +50,9 @@ function LoginForm() {
         </p>
       </div>
 
-      {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
-          {error}
+      {(error || sessionMessage) && (
+        <div role="alert" className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
+          {error || sessionMessage}
         </div>
       )}
 
