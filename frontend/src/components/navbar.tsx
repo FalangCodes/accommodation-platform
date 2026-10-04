@@ -11,14 +11,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Building2, Menu, X, Search } from "lucide-react";
+import { Building2, Menu, X } from "lucide-react";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function Navbar() {
-  const { user, logout, isLandlord, isModerator, isAdmin } = useAuth();
+  const { user, loading, logout, isLandlord, isModerator, isAdmin } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const router = useRouter();
 
   return (
     <nav className="sticky top-0 z-50 w-full bg-white border-b border-gray-100 shadow-sm">
@@ -40,7 +38,7 @@ export default function Navbar() {
           </Link>
 
           {/* ── Center nav links (desktop) ── */}
-          <div className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
+          <div className="hidden md:flex items-center gap-4 lg:gap-8">
             <Link
               href="/search"
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
@@ -64,7 +62,7 @@ export default function Navbar() {
               </Link>
             )}
             {isAdmin && (
-            <Link href="/admin">Admin</Link>
+            <Link href="/admin" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors" onClick={() => setMobileOpen(false)}>Admin</Link>
           )}
           </div>
           
@@ -118,7 +116,7 @@ export default function Navbar() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : (
+            ) : !loading ? (
               <>
                 <Link href="/login">
                   <Button
@@ -128,15 +126,15 @@ export default function Navbar() {
                     Sign in
                   </Button>
                 </Link>
-                <Link href="/register">
+                <Link href="/register?role=landlord">
                   <Button
                     className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-6 rounded-full shadow-sm hover:shadow-md transition-all"
                   >
-                    Get started
+                    List your property
                   </Button>
                 </Link>
               </>
-            )}
+            ) : null}
           </div>
 
           {/* ── Mobile hamburger ── */}
@@ -185,7 +183,7 @@ export default function Navbar() {
             )}
 
             {isAdmin && (
-              <Link href="/admin">Admin</Link>
+              <Link href="/admin" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors" onClick={() => setMobileOpen(false)}>Admin</Link>
             )}
             <div className="pt-2 border-t border-gray-100">
               {user ? (
@@ -201,23 +199,23 @@ export default function Navbar() {
                     Sign out
                   </button>
                 </div>
-              ) : (
+              ) : !loading ? (
                 <div className="flex gap-3">
                   <Link href="/login" onClick={() => setMobileOpen(false)}>
                     <Button variant="outline" size="sm" className="rounded-full">
                       Sign in
                     </Button>
                   </Link>
-                  <Link href="/register" onClick={() => setMobileOpen(false)}>
+                  <Link href="/register?role=landlord" onClick={() => setMobileOpen(false)}>
                     <Button
                       size="sm"
                       className="bg-[#1F4E79] text-white rounded-full"
                     >
-                      Get started
+                      List your property
                     </Button>
                   </Link>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

@@ -15,7 +15,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   clearSession: () => void;
   isStudent: boolean;
@@ -85,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("refresh_token", res.data.refresh_token);
     const me = await authApi.me();
     if (localStorage.getItem("access_token")) setUser(me.data);
+    return me.data as User;
   };
 
   const clearSession = () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import { isAxiosError } from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -13,7 +14,7 @@ import { toast } from "sonner";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  const redirect = searchParams.get("redirect");
   const { login } = useAuth();
   const reason = searchParams.get("reason");
   const sessionMessage = reason === "account_inactive" ? "Your account is inactive. Contact the administrator."
@@ -31,11 +32,17 @@ function LoginForm() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      const user = await login(email, password);
       toast.success("Welcome back!");
-      router.push(redirect);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Invalid email or password");
+      const rolePage = user.role === "landlord" ? "/dashboard"
+        : user.role === "moderator" ? "/moderation"
+        : user.role === "admin" ? "/admin" : "/search";
+      const returnPath = redirect?.startsWith("/") && !redirect.startsWith("//")
+        && !redirect.includes("\\") && redirect !== "/" ? redirect : null;
+      router.replace(returnPath || rolePage);
+    } catch (err) {
+      const detail = isAxiosError(err) ? err.response?.data?.detail : null;
+      setError(typeof detail === "string" ? detail : "Invalid email or password");
     } finally {
       setLoading(false);
     }
@@ -114,7 +121,7 @@ function LoginForm() {
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Don't have an account?{" "}
+        Don&apos;t have an account?{" "}
         <Link href="/register" className="text-[#1F4E79] font-semibold hover:underline">
           Create one
         </Link>

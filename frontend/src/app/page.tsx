@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import ActivityToast from "@/components/activity-toast";
+import Navbar from "@/components/navbar";
 import {
   GraduationCap,
   MapPin,
@@ -18,7 +19,6 @@ import {
   BadgePercent,
   UserRoundCheck,
   LockKeyhole,
-  Laptop2,
   MessageSquareText,
   TrendingUp,
   Building2,
@@ -91,41 +91,7 @@ export default function Home() {
   return (
     <div className="bg-white flex flex-col items-start w-full min-h-dvh">
 
-      {/* ── Navbar ── */}
-      <nav className="bg-white border-b border-gray-200 flex h-[72px] items-center justify-between px-5 lg:px-20 w-full shrink-0 sticky top-0 z-50">
-        <div className="flex gap-2 items-center shrink-0">
-          <GraduationCap className="w-7 h-7 text-[#1f4e79]" />
-          <span className="font-extrabold text-[#1f4e79] text-xl" style={{ fontFamily: "var(--font-outfit)" }}>
-            AccomFind
-          </span>
-        </div>
-        <div className="flex gap-5 lg:gap-8 items-center shrink-0">
-          <span
-            onClick={handleSearch}
-            className="hidden md:block font-semibold text-gray-800 text-sm cursor-pointer hover:text-[#1f4e79] transition-colors"
-          >
-            Browse Rooms
-          </span>
-          <span
-            onClick={() => router.push("/register?role=landlord")}
-            className="hidden md:block font-semibold text-gray-800 text-sm cursor-pointer hover:text-[#1f4e79] transition-colors"
-          >
-            For Landlords
-          </span>
-          <span
-            onClick={() => router.push("/login")}
-            className="font-semibold text-gray-800 text-sm cursor-pointer hover:text-[#1f4e79] transition-colors"
-          >
-            Sign In
-          </span>
-          <button
-            onClick={() => router.push("/register?role=landlord")}
-            className="border-2 border-[#1f4e79] px-5 py-2 rounded-xl font-bold text-[#1f4e79] text-sm hover:bg-[#1f4e79] hover:text-white transition-colors"
-          >
-            List Your Property
-          </button>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* ── Hero ── */}
       <section className="relative flex items-center w-full min-h-[680px] px-5 lg:px-20 py-16 lg:py-0">
@@ -245,30 +211,24 @@ export default function Home() {
             {[
               {
                 icon: <Search className="w-5 h-5 text-[#1f4e79]" />,
-                step: "01",
                 title: "Search near campus",
                 desc: "Select your university and filter by budget, distance, gender policy, and amenities.",
               },
               {
                 icon: <MessageSquareText className="w-5 h-5 text-[#1f4e79]" />,
-                step: "02",
                 title: "Read real reviews",
                 desc: "Every review comes from a verified student with a valid institutional email. No fake reviews.",
               },
               {
                 icon: <Shield className="w-5 h-5 text-[#1f4e79]" />,
-                step: "03",
                 title: "Move in with confidence",
                 desc: "Our AI analyses reviews for safety, cleanliness, and landlord responsiveness so you know what to expect.",
               },
             ].map((card) => (
               <div
-                key={card.step}
+                key={card.title}
                 className="relative bg-gray-50 border border-gray-200 flex flex-col gap-5 items-start p-8 rounded-2xl"
               >
-                <span className="absolute top-6 right-6 text-5xl font-black text-gray-100 leading-none select-none">
-                  {card.step}
-                </span>
                 <div className="bg-[#1f4e79]/10 flex items-center justify-center rounded-xl w-12 h-12 shrink-0">
                   {card.icon}
                 </div>
@@ -310,9 +270,9 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {featured.map((listing) => (
-                <div
+                <Link
                   key={listing.id}
-                  onClick={() => router.push(`/search?university_id=1`)}
+                  href={`/listings/${listing.id}`}
                   className="bg-white border border-gray-200 flex flex-col items-start rounded-2xl overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
                 >
                   {/* Image or gradient placeholder */}
@@ -364,7 +324,7 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
