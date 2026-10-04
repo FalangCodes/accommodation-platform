@@ -10,7 +10,15 @@ NAME = "uix_student_accommodation_review"
 
 
 def upgrade():
-    op.drop_constraint(NAME, "reviews", type_="unique")
+    inspector = sa.inspect(op.get_bind())
+    constraints = inspector.get_unique_constraints("reviews")
+    if any(constraint["name"] == NAME for constraint in constraints):
+        op.drop_constraint(NAME, "reviews", type_="unique")
+    else:
+        # Some development databases already use an index instead of a constraint.
+        # Recreate it to guarantee the intended predicate and columns.
+        if any(index["name"] == NAME for index in inspector.get_indexes("reviews")):
+            op.drop_index(NAME, table_name="reviews")
     op.create_index(NAME, "reviews", ["student_id", "accommodation_id"], unique=True,
                     postgresql_where=sa.text("deleted_at IS NULL"))
 

@@ -232,7 +232,8 @@ async def test_appeal_restoration_preserves_one_active_review(isolated_reviews, 
 
 
 @pytest.mark.asyncio
-async def test_actual_migration_changes_only_the_constraint_and_preserves_history(isolated_reviews):
+@pytest.mark.parametrize("existing_constraint", [True, False])
+async def test_actual_migration_changes_only_the_constraint_and_preserves_history(isolated_reviews, existing_constraint):
     _, sessions, _, _, _ = isolated_reviews
     path = Path(__file__).resolve().parents[2] / "alembic/versions/c3f6a9b2d5e8_allow_deleted_review_history.py"
     spec = importlib.util.spec_from_file_location("gap6_migration", path)
@@ -241,9 +242,9 @@ async def test_actual_migration_changes_only_the_constraint_and_preserves_histor
     async with sessions() as db:
         connection = await db.connection()
         def run_migration(sync):
-            # Start with the existing lifetime constraint in this test schema.
-            sync.execute(text("DROP INDEX uix_student_accommodation_review"))
-            sync.execute(text("ALTER TABLE reviews ADD CONSTRAINT uix_student_accommodation_review UNIQUE (student_id, accommodation_id)"))
+            if existing_constraint:
+                sync.execute(text("DROP INDEX uix_student_accommodation_review"))
+                sync.execute(text("ALTER TABLE reviews ADD CONSTRAINT uix_student_accommodation_review UNIQUE (student_id, accommodation_id)"))
             with Operations.context(MigrationContext.configure(sync)):
                 module.upgrade()
         await connection.run_sync(run_migration)
