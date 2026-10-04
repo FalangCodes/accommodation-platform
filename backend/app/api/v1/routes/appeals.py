@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import or_
 from datetime import datetime, timezone
 
 from app.db.base import get_db
@@ -12,6 +13,7 @@ from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.models.moderation import Appeal, ModerationLog
 from app.schemas.moderation import AppealCreate, AppealOut
+from app.services.appeal_policy import validate_current_penalty, ensure_quarantine_action
 
 router = APIRouter(prefix="/appeals", tags=["Appeals"])
 
@@ -50,32 +52,36 @@ async def submit_appeal(
     if body.resource_type == "review":
         if current_user.role != "student":
             raise HTTPException(status_code=403, detail="Only the review author can appeal this review.")
-        result = await db.execute(select(Student).where(Student.user_id == current_user.id))
+        result = await db.execute(select(Student).where(Student.user_id == current_user.id).with_for_update())
         student = result.scalar_one_or_none()
         if not student:
             raise HTTPException(status_code=404, detail="Student profile not found")
         result = await db.execute(select(Review).where(
             Review.id == body.resource_id, Review.student_id == student.id,
-        ))
+        ).with_for_update())
     else:
         if current_user.role != "landlord":
             raise HTTPException(status_code=403, detail="Only the owning landlord can appeal this item.")
-        result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
+        result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id).with_for_update())
         landlord = result.scalar_one_or_none()
         if not landlord:
             raise HTTPException(status_code=404, detail="Landlord profile not found")
         if body.resource_type == "listing":
             result = await db.execute(select(Accommodation).where(
                 Accommodation.id == body.resource_id, Accommodation.landlord_id == landlord.id,
-            ))
+            ).with_for_update())
         else:
             result = await db.execute(select(Landlord).where(
                 Landlord.id == body.resource_id, Landlord.user_id == current_user.id,
             ))
-    if not result.scalar_one_or_none():
+    resource = result.scalar_one_or_none()
+    if not resource:
         raise HTTPException(status_code=404, detail="Appealable item not found")
 
     lookup_type = "accommodation" if body.resource_type == "listing" else body.resource_type
+
+    if body.resource_type == "review":
+        await ensure_quarantine_action(db, resource)
 
     # Resolve the moderation log entry — use provided ID or look up the latest one
     if body.original_action_id is not None:
@@ -114,19 +120,21 @@ async def submit_appeal(
         resolved_action_id = log_entry.id
 
 
-    # Check no duplicate appeal already exists for this resource + appellant
+    await validate_current_penalty(db, body.resource_type, resource, log_entry)
+
+    # Serialize on the owner profile so concurrent requests cannot create duplicates.
     existing = await db.execute(
         select(Appeal).where(
             Appeal.appellant_id == current_user.id,
             Appeal.resource_type == body.resource_type,
             Appeal.resource_id == body.resource_id,
-            Appeal.status == "pending",
-        )
+            or_(Appeal.status == "pending", Appeal.original_action_id == resolved_action_id),
+        ).limit(1)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="You already have a pending appeal for this item.",
+            detail="An appeal is already pending for this item, or this action has already been appealed.",
         )
 
     appeal = Appeal(

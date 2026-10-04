@@ -1342,6 +1342,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string }> = {
   released:                         { label: "Released review",        color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   landlord_verified:                { label: "Verified landlord",      color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   landlord_verification_rejected:   { label: "Rejected verification",  color: "bg-red-50 text-red-700 border-red-200" },
+  quarantined: { label: "Automatic quarantine", color: "bg-amber-50 text-amber-700 border-amber-200" },
   appeal_upheld:                    { label: "Appeal upheld",          color: "bg-blue-50 text-blue-700 border-blue-200" },
   appeal_dismissed:                 { label: "Appeal dismissed",       color: "bg-slate-100 text-slate-600 border-slate-200" },
 };
@@ -1658,6 +1659,7 @@ export default function AdminPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
             <p className="text-sm text-slate-500">Platform management and analytics</p>
+            <button onClick={() => router.push("/moderation")} className="text-sm text-blue-600 hover:underline">Review moderation and appeals</button>
           </div>
         </div>
 

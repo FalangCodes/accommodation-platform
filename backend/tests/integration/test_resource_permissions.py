@@ -63,7 +63,7 @@ def resources(monkeypatch):
         Accommodation: [listing, SimpleNamespace(id=2, landlord_id=2, status="approved")],
         AccommodationImage: [SimpleNamespace(id=1, accommodation_id=1, blob_url="mock://image1"),
                              SimpleNamespace(id=2, accommodation_id=2, blob_url="mock://image2")],
-        Review: [SimpleNamespace(id=1, student_id=1), SimpleNamespace(id=2, student_id=2)],
+        Review: [SimpleNamespace(id=1, student_id=1, deleted_at=datetime.now(timezone.utc), deleted_by=6, status="analysed"), SimpleNamespace(id=2, student_id=2)],
         AccommodationInsight: [SimpleNamespace(accommodation_id=1, insights={"safety": {"summary": "Hidden insight"}},
                                                 recommendations=[], review_count=1, generated_at=datetime.now(timezone.utc))],
     }
@@ -221,6 +221,12 @@ async def test_analytics_cache_does_not_bypass_ownership(resources):
 @pytest.mark.parametrize("explicit", [False, True])
 async def test_appeal_requires_ownership_and_preserves_duplicate_check(resources, resource_type, actor, other, action, explicit):
     app, headers, _, _, _, session = resources
+    _, _, listing, _, _, _ = resources
+    if resource_type == "listing":
+        listing.status = "suspended"
+    elif resource_type == "landlord":
+        session.get(Landlord, 1).verification_status = "rejected"
+        session.commit()
     body = {"resource_type": resource_type, "resource_id": 1, "reason": "Please reconsider this moderation decision."}
     if explicit:
         body["original_action_id"] = action

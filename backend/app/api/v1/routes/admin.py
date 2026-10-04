@@ -478,6 +478,8 @@ async def activate_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "system":
+        raise HTTPException(status_code=400, detail="System accounts cannot be activated")
 
     if not user.is_active:
         user.is_active = True

@@ -2,6 +2,7 @@
 
 import { ProtectedDocumentLink } from "@/components/protected-document-link";
 
+import { isAxiosError } from "axios";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,8 @@ interface PendingAppeal {
   resource_type: string;
   resource_id: number;
   original_action_id: number;
+  appellant_email: string | null;
+  original_action: { action: string; reason: string | null; created_at: string } | null;
   reason: string;
   status: string;
 }
@@ -614,7 +617,7 @@ function AppealsTab({
 }: {
   onResolve: (appeal: PendingAppeal, decision: "upheld" | "dismissed") => void;
 }) {
-  const { data: appeals = [], isLoading } = useQuery({
+  const { data: appeals = [], isLoading, isError } = useQuery({
     queryKey: ["pending-appeals"],
     queryFn: fetchPendingAppeals,
   });
@@ -628,6 +631,8 @@ function AppealsTab({
       </div>
     );
   }
+
+  if (isError) return <p className="text-sm text-red-600">Could not load appeals. Refresh to retry.</p>;
 
   if (appeals.length === 0) {
     return (
@@ -656,6 +661,12 @@ function AppealsTab({
                   {appeal.resource_type} #{appeal.resource_id}
                 </span>
               </div>
+              {appeal.original_action && (
+                <div className="mb-3 text-sm text-slate-600">
+                  <p>Original action: {appeal.original_action.action.replaceAll("_", " ")}</p>
+                  <p>{appeal.original_action.reason ?? "No reason recorded."}</p>
+                </div>
+              )}
               <div className="mb-3">
                 <p className="text-xs font-semibold text-slate-600 mb-1">Reason provided:</p>
                 <p className="text-sm text-slate-700 leading-relaxed italic bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -663,7 +674,7 @@ function AppealsTab({
                 </p>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-400">
-                <span>Appeal #{appeal.id}</span>
+                <span>Appeal #{appeal.id} · {appeal.appellant_email}</span>
               </div>
             </div>
 
@@ -682,7 +693,7 @@ function AppealsTab({
                 onClick={() => onResolve(appeal, "dismissed")}
               >
                 <XCircle className="w-3.5 h-3.5" />
-                Dismiss (Keep ban)
+                Dismiss appeal
               </Button>
             </div>
           </div>
@@ -725,7 +736,7 @@ function ResolveAppealModal({
           <DialogDescription className="text-center text-sm">
             {isUpheld 
               ? `This will overturn the moderation action and restore the ${appeal?.resource_type}.`
-              : `This will reject the appeal and the ${appeal?.resource_type} will remain banned.`}
+              : `This will reject the appeal and the ${appeal?.resource_type} will keep its current status.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
@@ -762,7 +773,7 @@ function ResolveAppealModal({
 
 
 export default function AdminPage() {
-  const { user, loading, isStudent, isLandlord } = useAuth();
+  const { user, loading, isStudent, isLandlord, isAdmin } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -848,7 +859,7 @@ export default function AdminPage() {
   const { data: pendingAppeals = [] } = useQuery({
     queryKey: ["pending-appeals"],
     queryFn: fetchPendingAppeals,
-    enabled: !!user && !isStudent && !isLandlord,
+    enabled: !!user && isAdmin,
   });
 
   const { data: suspendedListings = [] } = useQuery({
@@ -883,18 +894,19 @@ export default function AdminPage() {
   };
 
   const handleResolveAppeal = async (reason: string) => {
-    if (!resolveAppealTarget) return;
+    if (!isAdmin || !resolveAppealTarget) return;
     setActionLoading(true);
     try {
       await api.patch(`/api/v1/moderation/appeals/${resolveAppealTarget.appeal.id}/resolve`, { 
         decision: resolveAppealTarget.decision, 
         reason 
       });
-      queryClient.invalidateQueries({ queryKey: ["pending-appeals"] });
+      await queryClient.invalidateQueries();
       toast.success(`Appeal ${resolveAppealTarget.decision}.`);
       setResolveAppealTarget(null);
-    } catch {
-      toast.error("Failed to resolve appeal");
+    } catch (error: unknown) {
+      toast.error(isAxiosError(error) && typeof error.response?.data?.detail === "string"
+        ? error.response.data.detail : "Failed to resolve appeal");
     } finally {
       setActionLoading(false);
     }
@@ -1013,6 +1025,7 @@ export default function AdminPage() {
             )}
           </button>
 
+          {isAdmin && (
           <button
             onClick={() => setActiveTab("appeals")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -1027,6 +1040,7 @@ export default function AdminPage() {
               </span>
             )}
           </button>
+          )}
         </div>
 
         {/* ── Pending listings tab ── */}
@@ -1170,7 +1184,7 @@ export default function AdminPage() {
             onReject={(landlord) => setRejectLandlordTarget(landlord)}
           />
         )}
-        {activeTab === "appeals" && (
+        {isAdmin && activeTab === "appeals" && (
           <AppealsTab
             onResolve={(appeal, decision) => setResolveAppealTarget({ appeal, decision })}
           />

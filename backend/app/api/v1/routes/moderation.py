@@ -7,24 +7,33 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.db.base import get_db
-from app.core.dependencies import get_current_moderator
+from app.core.dependencies import get_current_moderator, get_current_admin
 from app.models.user import User
 from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.models.moderation import ModerationLog
 from app.models.landlord import Landlord
 from app.models.student import Student
+from app.services.appeal_policy import validate_current_penalty, log_resource_type
 from datetime import datetime, timezone
 from app.models.moderation import ModerationLog, Appeal
 from app.core.dependencies import get_current_moderator
 from app.schemas.moderation import AppealOut, AppealResolveBody
-from app.services.cache_service import cache_delete_pattern, cache_delete, key_listing, key_reviews, key_analytics
+from app.services.cache_service import cache_delete_pattern, cache_delete, key_listing, key_reviews, key_analytics, key_featured, key_activity, key_platform_stats
 
 router = APIRouter(prefix="/moderation", tags=["Moderation"])
 
 
 class ModerationDecision(BaseModel):
     reason: Optional[str] = None
+
+
+async def invalidate_listing(listing_id, reviews_changed=False):
+    keys = [key_listing(listing_id), key_analytics(listing_id), key_featured(), key_activity(), key_platform_stats()]
+    if reviews_changed:
+        keys.append(key_reviews(listing_id))
+    await cache_delete(*keys)
+    await cache_delete_pattern("search:*")
 
 
 # ── LISTING MODERATION ────────────────────────────────────────────────────────
@@ -35,7 +44,7 @@ async def approve_listing(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Accommodation).where(Accommodation.id == accommodation_id)
+    query = select(Accommodation).where(Accommodation.id == accommodation_id).with_for_update()
     result = await db.execute(query)
     accommodation = result.scalar_one_or_none()
 
@@ -55,8 +64,7 @@ async def approve_listing(
     )
     db.add(log)
     await db.commit()
-    await cache_delete_pattern("search:*")
-    await cache_delete(key_listing(accommodation_id))
+    await invalidate_listing(accommodation_id)
 
     return {"message": f"Listing {accommodation_id} approved successfully"}
 
@@ -68,7 +76,7 @@ async def reject_listing(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Accommodation).where(Accommodation.id == accommodation_id)
+    query = select(Accommodation).where(Accommodation.id == accommodation_id).with_for_update()
     result = await db.execute(query)
     accommodation = result.scalar_one_or_none()
 
@@ -87,6 +95,8 @@ async def reject_listing(
     db.add(log)
     await db.commit()
 
+    await invalidate_listing(accommodation_id)
+
     return {"message": f"Listing {accommodation_id} rejected", "reason": decision.reason}
 
 
@@ -97,7 +107,7 @@ async def suspend_listing(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id))
+    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id).with_for_update())
     accommodation = result.scalar_one_or_none()
     if not accommodation:
         raise HTTPException(status_code=404, detail="Accommodation not found")
@@ -115,8 +125,7 @@ async def suspend_listing(
     )
     db.add(log)
     await db.commit()
-    await cache_delete(key_listing(accommodation_id))
-    await cache_delete_pattern("search:*")
+    await invalidate_listing(accommodation_id)
     return {"message": f"Listing {accommodation_id} suspended", "reason": decision.reason}
 
 
@@ -126,7 +135,7 @@ async def reinstate_listing(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id))
+    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id).with_for_update())
     accommodation = result.scalar_one_or_none()
     if not accommodation:
         raise HTTPException(status_code=404, detail="Accommodation not found")
@@ -141,8 +150,7 @@ async def reinstate_listing(
     )
     db.add(log)
     await db.commit()
-    await cache_delete(key_listing(accommodation_id))
-    await cache_delete_pattern("search:*")
+    await invalidate_listing(accommodation_id)
     return {"message": f"Listing {accommodation_id} reinstated"}
 
 
@@ -153,7 +161,7 @@ async def remove_listing(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id))
+    result = await db.execute(select(Accommodation).where(Accommodation.id == accommodation_id).with_for_update())
     accommodation = result.scalar_one_or_none()
     if not accommodation:
         raise HTTPException(status_code=404, detail="Accommodation not found")
@@ -169,8 +177,7 @@ async def remove_listing(
     )
     db.add(log)
     await db.commit()
-    await cache_delete(key_listing(accommodation_id))
-    await cache_delete_pattern("search:*")
+    await invalidate_listing(accommodation_id)
     return {"message": f"Listing {accommodation_id} removed", "reason": decision.reason}
 
 
@@ -213,10 +220,13 @@ async def remove_review(
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
+    owner = (await db.execute(select(Review.student_id).where(Review.id == review_id))).scalar_one_or_none()
+    if owner is not None:
+        await db.execute(select(Student).where(Student.id == owner).with_for_update())
     query = select(Review).where(
         Review.id == review_id,
         Review.deleted_at == None
-    )
+    ).with_for_update()
     result = await db.execute(query)
     review = result.scalar_one_or_none()
 
@@ -236,6 +246,8 @@ async def remove_review(
     )
     db.add(log)
     await db.commit()
+
+    await invalidate_listing(review.accommodation_id, reviews_changed=True)
 
     return {"message": f"Review {review_id} removed", "reason": decision.reason}
 
@@ -380,7 +392,8 @@ async def get_moderation_log(
 
         output.append({
             "id": log.id,
-            "moderator_email": moderator.email if moderator else f"User #{log.moderator_id}",
+            "moderator_email": ("System (automatic moderation)" if moderator and moderator.role == "system"
+                                else moderator.email if moderator else f"User #{log.moderator_id}"),
             "action": log.action,
             "resource_type": log.resource_type,
             "resource_id": log.resource_id,
@@ -401,94 +414,97 @@ async def get_moderation_log(
 
 @router.get("/appeals")
 async def get_pending_appeals(
-    current_user: User = Depends(get_current_moderator),
+    current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(Appeal).where(Appeal.status == "pending").order_by(Appeal.id.asc())
-    )
-    appeals = result.scalars().all()
-    return [
-        {
-            "id": a.id,
-            "appellant_id": a.appellant_id,
-            "appellant_role": a.appellant_role,
-            "resource_type": a.resource_type,
-            "resource_id": a.resource_id,
-            "original_action_id": a.original_action_id,
-            "reason": a.reason,
-            "status": a.status,
-            "assigned_admin_id": a.assigned_admin_id,
-            "resolved_at": a.resolved_at,
-        }
-        for a in appeals
-    ]
+    result = await db.execute(select(Appeal).where(Appeal.status == "pending").order_by(Appeal.id.asc()))
+    output = []
+    for appeal in result.scalars().all():
+        action = await db.get(ModerationLog, appeal.original_action_id)
+        appellant = await db.get(User, appeal.appellant_id)
+        output.append({
+            "id": appeal.id, "appellant_id": appeal.appellant_id,
+            "appellant_role": appeal.appellant_role, "resource_type": appeal.resource_type,
+            "resource_id": appeal.resource_id, "original_action_id": appeal.original_action_id,
+            "reason": appeal.reason, "status": appeal.status,
+            "assigned_admin_id": appeal.assigned_admin_id, "resolved_at": appeal.resolved_at,
+            "appellant_email": appellant.email if appellant else None,
+            "original_action": {"action": action.action, "reason": action.reason,
+                                "created_at": action.created_at} if action else None,
+        })
+    return output
 
 
 @router.patch("/appeals/{appeal_id}/resolve")
 async def resolve_appeal(
     appeal_id: int,
     body: AppealResolveBody,
-    current_user: User = Depends(get_current_moderator),
+    current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
     if body.decision not in ("upheld", "dismissed"):
         raise HTTPException(status_code=400, detail="Decision must be 'upheld' or 'dismissed'")
-
-    result = await db.execute(select(Appeal).where(Appeal.id == appeal_id).with_for_update())
-    appeal = result.scalar_one_or_none()
+    appeal = (await db.execute(select(Appeal).where(Appeal.id == appeal_id).with_for_update())).scalar_one_or_none()
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
     if appeal.status != "pending":
-        raise HTTPException(status_code=400, detail="Appeal already resolved")
+        raise HTTPException(status_code=409, detail="Appeal already resolved")
+
+    action = await db.get(ModerationLog, appeal.original_action_id)
+    if not action or action.resource_type != log_resource_type(appeal.resource_type) or action.resource_id != appeal.resource_id:
+        raise HTTPException(status_code=409, detail="The original moderation action does not match this appeal.")
+    listing_id = None
+    reviews_changed = False
+    if body.decision == "upheld":
+        if appeal.resource_type == "review":
+            owner = (await db.execute(select(Review.student_id).where(Review.id == appeal.resource_id))).scalar_one_or_none()
+            if owner is not None:
+                await db.execute(select(Student).where(Student.id == owner).with_for_update())
+            resource = (await db.execute(select(Review).where(Review.id == appeal.resource_id).with_for_update())).scalar_one_or_none()
+        elif appeal.resource_type == "listing":
+            resource = (await db.execute(select(Accommodation).where(Accommodation.id == appeal.resource_id).with_for_update())).scalar_one_or_none()
+        elif appeal.resource_type == "landlord":
+            resource = (await db.execute(select(Landlord).where(Landlord.id == appeal.resource_id).with_for_update())).scalar_one_or_none()
+        else:
+            raise HTTPException(status_code=409, detail="Unsupported appeal resource.")
+        if not resource:
+            raise HTTPException(status_code=409, detail="The appealed item no longer exists.")
+        await validate_current_penalty(db, appeal.resource_type, resource, action)
+        if appeal.resource_type == "review":
+            conflict = await db.execute(select(Review.id).where(
+                Review.student_id == resource.student_id, Review.accommodation_id == resource.accommodation_id,
+                Review.deleted_at.is_(None), Review.id != resource.id,
+            ).limit(1))
+            if conflict.scalar_one_or_none() is not None:
+                raise HTTPException(status_code=409, detail="A newer active review exists. The old review cannot be restored.")
+            resource.deleted_at = None
+            resource.deleted_by = None
+            resource.cooldown_expires_at = None
+            resource.status = "released"
+            listing_id = resource.accommodation_id
+            reviews_changed = True
+        elif appeal.resource_type == "listing":
+            resource.status = "approved"
+            listing_id = resource.id
+        else:
+            resource.verification_status = "verified"
+            resource.id_number_verified = True
+            resource.verified_at = datetime.now(timezone.utc)
+            resource.rejection_reason = None
 
     appeal.status = body.decision
     appeal.assigned_admin_id = current_user.id
     appeal.resolved_at = datetime.now(timezone.utc)
-
-    restored_review_listing = None
-
-    # Automatically restore the resource if upheld
-    if body.decision == "upheld":
-        if appeal.resource_type == "review":
-            res = await db.execute(select(Review).where(Review.id == appeal.resource_id))
-            review = res.scalar_one_or_none()
-            if review:
-                # Serialize restoration with review submission/deletion for this student.
-                await db.execute(select(Student).where(Student.id == review.student_id).with_for_update())
-                conflict = await db.execute(select(Review.id).where(
-                    Review.student_id == review.student_id,
-                    Review.accommodation_id == review.accommodation_id,
-                    Review.deleted_at.is_(None), Review.id != review.id,
-                ).limit(1))
-                if conflict.scalar_one_or_none() is not None:
-                    await db.rollback()
-                    raise HTTPException(status_code=409, detail="A newer active review exists. The old review cannot be restored.")
-                review.deleted_at = None
-                review.deleted_by = None
-                review.status = "released"
-                restored_review_listing = review.accommodation_id
-        elif appeal.resource_type == "listing":
-            res = await db.execute(select(Accommodation).where(Accommodation.id == appeal.resource_id))
-            acc = res.scalar_one_or_none()
-            if acc:
-                acc.status = "approved"
-                await cache_delete(key_listing(acc.id))
-                await cache_delete_pattern("search:*")
-
-    log_entry = ModerationLog(
-        moderator_id=current_user.id,
-        action=f"appeal_{body.decision}",
-        resource_type=appeal.resource_type,
-        resource_id=appeal.resource_id,
-        reason=body.reason,
-    )
-    db.add(log_entry)
+    db.add(ModerationLog(moderator_id=current_user.id, action=f"appeal_{body.decision}",
+                         resource_type=log_resource_type(appeal.resource_type),
+                         resource_id=appeal.resource_id, reason=body.reason))
     await db.commit()
-    if restored_review_listing is not None:
-        await cache_delete(key_reviews(restored_review_listing), key_listing(restored_review_listing), key_analytics(restored_review_listing))
-        await cache_delete_pattern("search:*")
-
+    if listing_id is not None:
+        await invalidate_listing(listing_id, reviews_changed=reviews_changed)
+    elif body.decision == "upheld" and appeal.resource_type == "landlord":
+        affected = await db.execute(select(Accommodation.id).where(Accommodation.landlord_id == appeal.resource_id))
+        for affected_id in affected.scalars().all():
+            await invalidate_listing(affected_id)
     return {"detail": f"Appeal {body.decision}", "appeal_id": appeal_id}
 
 from app.models.review import Review, ReviewNLPResult
@@ -500,12 +516,12 @@ async def release_review(
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
-        select(Review).where(Review.id == review_id)
+        select(Review).where(Review.id == review_id).with_for_update()
     )
     review = result.scalar_one_or_none()
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    if review.status != "quarantined":
+    if review.deleted_at is not None or review.status != "quarantined":
         raise HTTPException(status_code=400, detail="Review is not quarantined")
 
     review.status = "released"
@@ -518,5 +534,7 @@ async def release_review(
     )
     db.add(log_entry)
     await db.commit()
+
+    await invalidate_listing(review.accommodation_id, reviews_changed=True)
 
     return {"detail": "Review released and now publicly visible", "review_id": review_id}

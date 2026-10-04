@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { reviewsApi, api } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { MyAppeals } from "@/components/my-appeals";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PageLayout from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +87,7 @@ const VERIFICATION_COLORS: Record<string, string> = {
 // ─── Student profile ──────────────────────────────────────────────────────────
 
 function StudentProfile({ user }: { user: any }) {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -132,6 +134,7 @@ function StudentProfile({ user }: { user: any }) {
         resource_id: appealTarget.id,
         reason: appealReason.trim(),
       });
+      queryClient.invalidateQueries({ queryKey: ["my-appeals"] });
       toast.success("Appeal submitted. An administrator will review it shortly.");
       setAppealTarget(null);
       setAppealReason("");
@@ -315,6 +318,7 @@ function StudentProfile({ user }: { user: any }) {
 // ─── Landlord profile ─────────────────────────────────────────────────────────
 
 function LandlordProfile({ user }: { user: any }) {
+  const queryClient = useQueryClient();
   const router = useRouter();
 
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -351,6 +355,7 @@ function LandlordProfile({ user }: { user: any }) {
         resource_id: appealTarget.id,
         reason: appealReason.trim(),
       });
+      queryClient.invalidateQueries({ queryKey: ["my-appeals"] });
       toast.success("Appeal submitted. An administrator will review it shortly.");
       setAppealTarget(null);
       setAppealReason("");
@@ -487,11 +492,11 @@ function LandlordProfile({ user }: { user: any }) {
                       {cfg.label}
                     </Badge>
                     {/* Appeal button — only on rejected listings */}
-                    {listing.status === "rejected" && (
+                    {["rejected", "suspended", "removed"].includes(listing.status) && (
                       <button
                         onClick={() => { setAppealTarget(listing); setAppealReason(""); }}
                         className="p-1.5 rounded-xl text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
-                        title="Appeal this rejection"
+                        title="Appeal this moderation decision"
                       >
                         <Flag className="w-3.5 h-3.5" />
                       </button>
@@ -511,9 +516,9 @@ function LandlordProfile({ user }: { user: any }) {
             <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 mx-auto mb-2">
               <Flag className="h-5 w-5 text-amber-500" />
             </div>
-            <DialogTitle className="text-center">Appeal listing rejection</DialogTitle>
+            <DialogTitle className="text-center">Appeal listing decision</DialogTitle>
             <DialogDescription className="text-center text-sm">
-              Explain why you believe your listing was incorrectly rejected. An administrator will review your appeal.
+              Explain why you believe your listing was incorrectly rejected, suspended or removed. An administrator will review your appeal.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2">
@@ -716,6 +721,7 @@ export default function ProfilePage() {
           {isStudent && <StudentProfile user={user} />}
           {isLandlord && <LandlordProfile user={user} />}
           {isModerator && <ModeratorProfile user={user} />}
+          {(isStudent || isLandlord) && <MyAppeals />}
         </div>
       </div>
     </PageLayout>

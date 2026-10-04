@@ -16,7 +16,7 @@ from app.core.encryption import decrypt_value
 router = APIRouter(prefix="/landlords", tags=["Landlords"])
 
 async def get_landlord_profile(current_user: User, db: AsyncSession) -> Landlord:
-    result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id))
+    result = await db.execute(select(Landlord).where(Landlord.user_id == current_user.id).with_for_update())
     landlord = result.scalar_one_or_none()
     if not landlord:
         raise HTTPException(status_code=404, detail="Landlord profile not found")
@@ -157,7 +157,7 @@ async def verify_landlord(
     db: AsyncSession = Depends(get_db)
 ):
     """Approve a landlord's verification."""
-    result = await db.execute(select(Landlord).where(Landlord.id == landlord_id))
+    result = await db.execute(select(Landlord).where(Landlord.id == landlord_id).with_for_update())
     landlord = result.scalar_one_or_none()
     if not landlord:
         raise HTTPException(status_code=404, detail="Landlord not found")
@@ -193,7 +193,7 @@ async def reject_landlord_verification(
     if not reason:
         raise HTTPException(status_code=400, detail="Rejection reason is required")
 
-    result = await db.execute(select(Landlord).where(Landlord.id == landlord_id))
+    result = await db.execute(select(Landlord).where(Landlord.id == landlord_id).with_for_update())
     landlord = result.scalar_one_or_none()
     if not landlord:
         raise HTTPException(status_code=404, detail="Landlord not found")

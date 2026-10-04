@@ -55,7 +55,7 @@ async def isolated_reviews(monkeypatch):
         async with sessions() as db:
             db.add_all([User(id=1, email="test@spu.ac.za", role="student", is_active=True,
                              email_verified_at=datetime.now(timezone.utc), password_hash="unused"),
-                        User(id=2, email="mod@example.test", role="moderator", is_active=True, password_hash="unused"),
+                        User(id=2, email="admin@example.test", role="admin", is_active=True, password_hash="unused"),
                         User(id=3, email="owner@example.test", role="landlord", is_active=True, password_hash="unused"),
                         University(id=1, name="Test university", domain="spu.ac.za", province="Test",
                                    campus_location="SRID=4326;POINT(24.75 -28.75)")])
@@ -108,6 +108,7 @@ async def historical_review(sessions, deadline=None, deleted=True, status="analy
     async with sessions() as db:
         row = Review(student_id=1, accommodation_id=1, rating=2, body="Original review retained for history.",
                      status=status, deleted_at=datetime.now(timezone.utc) if deleted else None,
+                     deleted_by=2 if deleted else None,
                      cooldown_expires_at=deadline)
         db.add(row)
         await db.commit()

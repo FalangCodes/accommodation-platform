@@ -14,6 +14,8 @@ from app.services.insight_engine import extract_aspect_details, regenerate_accom
 from sqlalchemy.future import select
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import IntegrityError
+from app.services.appeal_policy import record_quarantine
+from app.services.cache_service import cache_delete, cache_delete_pattern, key_reviews, key_listing, key_analytics
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,19 +38,18 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
 
     async with AsyncSessionLocal() as session:
         try:
-            # ── Guard: skip if NLP result already exists (prevents UniqueViolationError on retries) ──
+            review_result = await session.execute(
+                sa_select(Review).where(Review.id == review_id).with_for_update()
+            )
+            review = review_result.scalar_one_or_none()
+            if not review or review.deleted_at is not None or review.status != "pending_analysis":
+                return
+
+            # Serialize pipeline retries and preserve moderator decisions.
             existing = await session.execute(
                 sa_select(ReviewNLPResult).where(ReviewNLPResult.review_id == review_id)
             )
             existing_record = existing.scalar_one_or_none()
-
-            review_result = await session.execute(
-                sa_select(Review).where(Review.id == review_id)
-            )
-            review = review_result.scalar_one_or_none()
-            if not review:
-                logger.warning(f"[ReviewService] Review {review_id} not found in DB")
-                return
 
             # ── Determine aspect details ──────────────────────────────────────────
             # Prefer the new Gemini per-aspect sentiments (fixes the inheritance bug).
@@ -81,7 +82,8 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
                 existing_record.sentiment       = result["sentiment"]
                 existing_record.sentiment_score = result["sentiment_score"]
                 existing_record.aspects         = result["aspects"]
-                existing_record.aspect_details  = aspect_details
+                if hasattr(ReviewNLPResult, "aspect_details"):
+                    existing_record.aspect_details = aspect_details
                 existing_record.spam_flag       = result["is_toxic"]
                 logger.info(f"[ReviewService] Updated existing NLP record for review {review_id}")
             else:
@@ -90,19 +92,23 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
                     sentiment       = result["sentiment"],
                     sentiment_score = result["sentiment_score"],
                     aspects         = result["aspects"],
-                    aspect_details  = aspect_details,
                     spam_flag       = result["is_toxic"],
                 )
+                if hasattr(ReviewNLPResult, "aspect_details"):
+                    nlp_record.aspect_details = aspect_details
                 session.add(nlp_record)
 
             # ── Update review status ───────────────────────────────────────────────
             if result["is_toxic"]:
                 review.status = "quarantined"
+                await record_quarantine(session, review)
                 logger.info(f"[ReviewService] Review {review_id} quarantined (spam/toxic)")
             else:
                 review.status = "analysed"
 
             await session.commit()
+            await cache_delete(key_reviews(review.accommodation_id), key_listing(review.accommodation_id), key_analytics(review.accommodation_id))
+            await cache_delete_pattern("search:*")
             logger.info(f"[ReviewService] NLP complete for review {review_id} — status={review.status}")
 
             # ── Regenerate accommodation-level insights ────────────────────────────

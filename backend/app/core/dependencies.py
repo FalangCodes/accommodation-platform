@@ -11,6 +11,8 @@ bearer_scheme = HTTPBearer()
 
 
 def ensure_account_access(user: User, payload: dict | None = None) -> None:
+    if user.role == "system":
+        raise HTTPException(status_code=403, detail="System accounts cannot sign in.")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Your account is inactive. Contact the administrator.", headers={"X-Auth-Error": "account_inactive"})
     if user.role == "student" and user.email_verified_at is None:
