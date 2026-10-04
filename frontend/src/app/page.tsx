@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -194,7 +195,7 @@ export default function Home() {
       </section>
 
       {/* ── Trust / Stats Bar ── */}
-      <section className="bg-white border-y border-gray-100 w-full shrink-0">
+      <section id="trust-safety" className="bg-white border-y border-gray-100 w-full shrink-0">
         <div className="max-w-7xl mx-auto px-5 lg:px-20 py-6">
           <div className="flex flex-wrap items-center justify-between gap-y-4 gap-x-6">
             {[
@@ -227,7 +228,7 @@ export default function Home() {
       </section>
 
       {/* ── How It Works ── */}
-      <section className="bg-white w-full shrink-0">
+      <section id="how-it-works" className="bg-white w-full shrink-0">
         <div className="max-w-7xl mx-auto px-5 lg:px-20 py-24">
           <div className="flex flex-col gap-3 items-center text-center mb-14">
             <h2
@@ -371,7 +372,7 @@ export default function Home() {
       )}
 
       {/* ── Landlord Section ── */}
-      <section className="bg-[#f0f4f8] w-full shrink-0">
+      <section id="landlord-insights" className="bg-[#f0f4f8] w-full shrink-0">
         <div className="max-w-7xl mx-auto px-5 lg:px-20 py-24">
           <div className="flex flex-col gap-3 items-center text-center mb-14">
             <h2
@@ -485,40 +486,29 @@ export default function Home() {
               <p className="text-white/70 text-sm leading-relaxed max-w-[240px]">
                 Simplifying and securing student housing near major South African campuses.
               </p>
-              <div className="flex gap-3">
-                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-                </div>
-                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg>
-                </div>
-                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
-                </div>
-                <div className="bg-white/10 flex items-center justify-center rounded-full w-9 h-9 cursor-pointer hover:bg-white/20 transition-colors">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>
-                </div>
-              </div>
+
             </div>
 
             {/* Link columns */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-10 text-sm">
+            <div className="grid grid-cols-2 gap-10 text-sm">
               {[
                 {
                   heading: "For Students",
-                  links: ["Find a Room", "How It Works", "Trust & Safety", "Student Support"],
+                  links: [
+                    { label: "Find a Room", href: "/search" },
+                    { label: "How It Works", href: "#how-it-works" },
+                    { label: "Trust & Safety", href: "#trust-safety" },
+                    { label: "My Account", href: "/profile" },
+                  ],
                 },
                 {
                   heading: "For Landlords",
-                  links: ["List a Property", "AI Insights", "Verification Portal", "Landlord FAQ"],
-                },
-                {
-                  heading: "Company",
-                  links: ["About AccomFind", "Careers", "Press Kit", "Contact Us"],
-                },
-                {
-                  heading: "Legal",
-                  links: ["Privacy Policy", "Terms of Service", "Cookie Policy", "SLA Guide"],
+                  links: [
+                    { label: "List a Property", href: "/dashboard" },
+                    { label: "AI Insights", href: "#landlord-insights" },
+                    { label: "Verification Portal", href: "/dashboard" },
+                    { label: "Account Help", href: "/forgot-password" },
+                  ],
                 },
               ].map((col) => (
                 <div key={col.heading} className="flex flex-col gap-4">
@@ -530,12 +520,10 @@ export default function Home() {
                   </span>
                   <div className="flex flex-col gap-3">
                     {col.links.map((link) => (
-                      <span
-                        key={link}
-                        className="text-white/60 cursor-pointer hover:text-white transition-colors"
-                      >
-                        {link}
-                      </span>
+                      <Link key={link.label} href={link.href}
+                        className="text-white/60 hover:text-white transition-colors">
+                        {link.label}
+                      </Link>
                     ))}
                   </div>
                 </div>

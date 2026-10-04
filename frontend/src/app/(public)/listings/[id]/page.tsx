@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/page-layout";
+import { EnquiryButton } from "@/components/enquiry-button";
+import { LandlordReplyForm } from "@/components/landlord-reply-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, accommodationsApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -466,7 +468,7 @@ function AspectInsightCard({
     </div>
   );
 }
-function ReviewCard({ review, blurred }: { review: Review; blurred: boolean }) {
+function ReviewCard({ review, blurred, canReply, listingId }: { review: Review; blurred: boolean; canReply: boolean; listingId: string }) {
   const sentiment = review.nlp?.sentiment?.toLowerCase() as keyof typeof SENTIMENT_STYLES | undefined;
 
   return (
@@ -500,6 +502,8 @@ function ReviewCard({ review, blurred }: { review: Review; blurred: boolean }) {
       </p>
 
       
+
+      {!blurred && canReply && !review.reply && <LandlordReplyForm reviewId={review.id} listingId={listingId} />}
 
       {!blurred && review.reply && (
         <div className="mt-3 pl-4 border-l-2 border-slate-200 bg-slate-50 rounded-r-xl p-3">
@@ -587,6 +591,13 @@ export default function ListingDetailPage() {
     queryFn: () => fetchReviews(id),
     enabled: !authLoading && activeTab === "reviews",
   });
+
+  const { data: ownerProfile } = useQuery<{ id: number }>({
+    queryKey: ["reply-landlord-profile", user?.id],
+    queryFn: () => api.get("/api/v1/landlords/me").then(response => response.data),
+    enabled: !authLoading && user?.role === "landlord" && activeTab === "reviews",
+  });
+  const canReply = user?.role === "landlord" && !!ownerProfile && !!listing && ownerProfile.id === listing.landlord_id;
 
   const reviews = isGuest ? (reviewPreview?.items ?? []).slice(0, 2) : (reviewPreview?.items ?? []);
   const lockedReviewCount = isGuest ? Math.max(0, (reviewPreview?.total ?? 0) - reviews.length) : 0;
@@ -896,7 +907,7 @@ export default function ListingDetailPage() {
                     </div>
                   ) : (
                     reviews.map((review) => (
-                      <ReviewCard key={review.id} review={review} blurred={false} />
+                      <ReviewCard key={review.id} review={review} blurred={false} canReply={canReply} listingId={id} />
                     ))
                   )}
 
@@ -1041,9 +1052,7 @@ export default function ListingDetailPage() {
                         <Link href={`/login?redirect=/listings/${id}`}>Sign in to enquire</Link>
                       </Button>
                     ) : (
-                      <Button className="w-full bg-white text-slate-900 hover:bg-slate-100 rounded-xl font-semibold">
-                        Contact landlord
-                      </Button>
+                      <EnquiryButton listingId={listing.id} listingTitle={listing.title} />
                     )}
                   </div>
 

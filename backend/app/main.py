@@ -11,6 +11,7 @@ from app.api.v1.routes.admin import router as admin_router
 from app.api.v1.routes.reports import router as reports_router
 from app.api.v1.routes.appeals import router as appeals_router
 from app.api.v1.routes.documents import router as documents_router
+from app.api.v1.routes.enquiries import router as enquiries_router
 from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
 from app.services.report_service import run_monthly_auto_reports
@@ -103,7 +104,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Auth-Error", "Content-Disposition"],
+    expose_headers=["X-Auth-Error", "Content-Disposition", "Retry-After"],
 )
 
 app.include_router(auth.router, prefix="/api/v1")
@@ -116,6 +117,7 @@ app.include_router(admin_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(appeals_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
+app.include_router(enquiries_router, prefix="/api/v1")
 
 
 @app.get("/health")

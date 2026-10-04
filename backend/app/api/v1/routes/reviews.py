@@ -310,12 +310,14 @@ async def reply_to_review(
     query = select(Review).where(
         Review.id == review_id,
         Review.deleted_at == None
-    )
+    ).with_for_update()
     result = await db.execute(query)
     review = result.scalar_one_or_none()
 
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
+    if review.status not in ("analysed", "released"):
+        raise HTTPException(status_code=409, detail="Only published reviews can receive a reply")
 
     # 3. Check the review is for one of this landlord's accommodations
     query = select(Accommodation).where(
@@ -351,5 +353,6 @@ async def reply_to_review(
     db.add(new_reply)
     await db.commit()
     await db.refresh(new_reply)
+    await cache_delete(key_reviews(review.accommodation_id))
 
     return new_reply

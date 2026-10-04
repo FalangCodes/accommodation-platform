@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -43,4 +43,9 @@ class ReviewResponse(BaseModel):
 
 
 class ReviewReplyCreate(BaseModel):
-    body: str = Field(..., min_length=10)
+    body: str = Field(..., min_length=10, max_length=3000)
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def trim_body(cls, value):
+        return value.strip() if isinstance(value, str) else value

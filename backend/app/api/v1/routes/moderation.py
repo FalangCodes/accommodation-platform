@@ -307,6 +307,7 @@ async def get_pending_listings(
 async def get_moderation_log(
     page: int = 1,
     page_size: int = 20,
+    mine: bool = False,
     current_user: User = Depends(get_current_moderator),
     db: AsyncSession = Depends(get_db)
 ):
@@ -319,13 +320,15 @@ async def get_moderation_log(
     offset = (page - 1) * page_size
 
     # Total count
-    count_result = await db.execute(select(func.count(ModerationLog.id)))
+    filters = [ModerationLog.moderator_id == current_user.id] if mine else []
+    count_result = await db.execute(select(func.count(ModerationLog.id)).where(*filters))
     total = count_result.scalar() or 0
 
     # Paginated logs
     result = await db.execute(
         select(ModerationLog)
-        .order_by(ModerationLog.created_at.desc())
+        .where(*filters)
+        .order_by(ModerationLog.created_at.desc(), ModerationLog.id.desc())
         .limit(page_size)
         .offset(offset)
     )
@@ -392,6 +395,7 @@ async def get_moderation_log(
 
         output.append({
             "id": log.id,
+            "moderator_id": log.moderator_id,
             "moderator_email": ("System (automatic moderation)" if moderator and moderator.role == "system"
                                 else moderator.email if moderator else f"User #{log.moderator_id}"),
             "action": log.action,

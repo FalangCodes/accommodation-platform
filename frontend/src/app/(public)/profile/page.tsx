@@ -555,22 +555,20 @@ function ModeratorProfile({ user }: { user: any }) {
   const router = useRouter();
   const { isAdmin } = useAuth();
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError } = useQuery({
     queryKey: ["moderator-stats", user.id],
     queryFn: async () => {
-      const { data } = await api.get("/api/v1/moderation/log");
-      const myActions = data.filter((log: any) => log.moderator_id === user.id);
-      return {
-        actions_count: myActions.length,
-        recent_actions: myActions.slice(0, 10),
-      } as ModeratorStats;
+      const { data } = await api.get<{ total: number; items: ModeratorStats["recent_actions"] }>(
+        "/api/v1/moderation/log", { params: { mine: true, page_size: 10 } });
+      return { actions_count: data.total, recent_actions: data.items };
     },
   });
 
   const ACTION_COLORS: Record<string, string> = {
-    approved: "text-emerald-600",
-    rejected: "text-red-500",
-    removed: "text-red-500",
+    approve_listing: "text-emerald-600",
+    reject_listing: "text-red-500",
+    remove_review: "text-red-500",
+    remove_listing: "text-red-500",
     released: "text-blue-600",
     landlord_verified: "text-emerald-600",
     landlord_verification_rejected: "text-red-500",
@@ -581,7 +579,7 @@ function ModeratorProfile({ user }: { user: any }) {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center">
-          <div className="text-2xl font-bold text-slate-900">{stats?.actions_count ?? 0}</div>
+          <div className="text-2xl font-bold text-slate-900">{isLoading ? "…" : isError ? "—" : stats?.actions_count ?? 0}</div>
           <div className="text-xs text-slate-500 mt-1">Total actions logged</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center">
@@ -622,6 +620,8 @@ function ModeratorProfile({ user }: { user: any }) {
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-2xl" />)}
           </div>
+        ) : isError ? (
+          <p className="text-sm text-red-600">Could not load your moderation activity. Refresh to retry.</p>
         ) : !stats || stats.recent_actions.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
             <Activity className="w-8 h-8 text-slate-300 mx-auto mb-3" />
@@ -656,7 +656,7 @@ function ModeratorProfile({ user }: { user: any }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
-  const { user, loading, isStudent, isLandlord, isModerator } = useAuth();
+  const { user, loading, isStudent, isLandlord, isModerator, isAdmin } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -720,7 +720,7 @@ export default function ProfilePage() {
           {/* Role-specific content */}
           {isStudent && <StudentProfile user={user} />}
           {isLandlord && <LandlordProfile user={user} />}
-          {isModerator && <ModeratorProfile user={user} />}
+          {(isModerator || isAdmin) && <ModeratorProfile user={user} />}
           {(isStudent || isLandlord) && <MyAppeals />}
         </div>
       </div>
