@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 from typing import List
 
@@ -18,6 +19,7 @@ from app.services.cache_service import cache_delete, cache_delete_pattern, key_l
 
 from app.services.guest_access import reviews_response
 from app.services.resource_access import visible_accommodation
+from app.services.review_policy import review_eligibility, is_active_review_conflict
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -30,51 +32,17 @@ async def submit_review(
     db: AsyncSession = Depends(get_db)
 ):
     # 1. Get student profile
-    query = select(Student).where(Student.user_id == current_user.id)
+    query = select(Student).where(Student.user_id == current_user.id).with_for_update()
     result = await db.execute(query)
     student = result.scalar_one_or_none()
 
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found")
 
-    # 2. Check accommodation exists
-    query = select(Accommodation).where(Accommodation.id == review_in.accommodation_id)
-    result = await db.execute(query)
-    accommodation = result.scalar_one_or_none()
-
-    if not accommodation:
-        raise HTTPException(status_code=404, detail="Accommodation not found")
-
-    # 3. Check for existing active review
-    query = select(Review).where(
-        Review.student_id == student.id,
-        Review.accommodation_id == review_in.accommodation_id,
-        Review.deleted_at == None
-    )
-    result = await db.execute(query)
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You have already reviewed this accommodation."
-        )
-
-    # 4. Check cooldown from previously deleted review
-    query = select(Review).where(
-        Review.student_id == student.id,
-        Review.accommodation_id == review_in.accommodation_id,
-        Review.deleted_at != None,
-        Review.cooldown_expires_at > datetime.now(timezone.utc)
-    )
-    result = await db.execute(query)
-    cooldown = result.scalar_one_or_none()
-
-    if cooldown:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"You must wait until {cooldown.cooldown_expires_at} before reviewing this accommodation again."
-        )
+    await visible_accommodation(db, review_in.accommodation_id, current_user)
+    eligibility = await review_eligibility(db, student.id, review_in.accommodation_id)
+    if not eligibility["can_review"]:
+        raise HTTPException(status_code=409, detail=eligibility)
 
     # 5. Create the review
     new_review = Review(
@@ -85,7 +53,13 @@ async def submit_review(
         status="pending_analysis"
     )
     db.add(new_review)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as error:
+        await db.rollback()
+        if is_active_review_conflict(error):
+            raise HTTPException(status_code=409, detail={"code": "active_review", "message": "You already have a review for this listing."})
+        raise
     await cache_delete(
     key_listing(review_in.accommodation_id),
     key_reviews(review_in.accommodation_id),
@@ -99,10 +73,23 @@ async def submit_review(
         process_review_nlp,
         new_review.id,
         new_review.body,
-        AsyncSessionLocal()
     )
 
     return new_review
+
+@router.get("/eligibility/{accommodation_id}")
+async def get_review_eligibility(
+    accommodation_id: int,
+    current_user: User = Depends(get_current_student),
+    db: AsyncSession = Depends(get_db),
+):
+    await visible_accommodation(db, accommodation_id, current_user)
+    result = await db.execute(select(Student).where(Student.user_id == current_user.id))
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+    return await review_eligibility(db, student.id, accommodation_id)
+
 
 @router.get("/my")
 async def get_my_reviews(
@@ -271,9 +258,12 @@ async def delete_review(
     db: AsyncSession = Depends(get_db)
 ):
     # 1. Get student profile
-    query = select(Student).where(Student.user_id == current_user.id)
+    query = select(Student).where(Student.user_id == current_user.id).with_for_update()
     result = await db.execute(query)
     student = result.scalar_one_or_none()
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student profile not found")
 
     # 2. Find the review
     query = select(Review).where(

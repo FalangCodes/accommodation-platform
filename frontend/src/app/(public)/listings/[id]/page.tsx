@@ -144,6 +144,13 @@ async function fetchListing(id: string): Promise<ListingDetail> {
   return data;
 }
 
+interface ReviewEligibility {
+  can_review: boolean;
+  code: string;
+  message: string;
+  available_at: string | null;
+}
+
 interface ReviewPreview {
   items: Review[];
   total: number;
@@ -199,12 +206,15 @@ function WriteReviewModal({
         setRating(0);
         setBody("");
       }, 2000);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      if (typeof detail === "string" && detail.includes("already reviewed")) {
-        toast.error("You've already reviewed this listing.");
-      } else if (typeof detail === "string" && detail.includes("cooldown")) {
-        toast.error("You're in a 14-day cooldown period for this listing.");
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string | ReviewEligibility } } })?.response?.data?.detail;
+      if (detail && typeof detail === "object" && detail.code === "cooldown") {
+        const deadline = detail.available_at ? new Date(detail.available_at).toLocaleString() : "the cooldown ends";
+        toast.error(`You can review this listing again after ${deadline}.`);
+      } else if (detail && typeof detail === "object" && detail.code === "active_review") {
+        toast.error("You already have a review for this listing.");
+      } else if (typeof detail === "string") {
+        toast.error(detail);
       } else {
         toast.error("Failed to submit review. Please try again.");
       }
@@ -581,7 +591,21 @@ export default function ListingDetailPage() {
   const reviews = isGuest ? (reviewPreview?.items ?? []).slice(0, 2) : (reviewPreview?.items ?? []);
   const lockedReviewCount = isGuest ? Math.max(0, (reviewPreview?.total ?? 0) - reviews.length) : 0;
 
+  const { data: eligibility, isPending: eligibilityPending, isError: eligibilityError } = useQuery<ReviewEligibility>({
+    queryKey: ["review-eligibility", id, user?.id],
+    queryFn: async () => (await api.get(`/api/v1/reviews/eligibility/${id}`)).data,
+    enabled: !authLoading && user?.role === "student" && activeTab === "reviews",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+  const reviewMessage = eligibilityPending ? "Checking whether you can review…"
+    : eligibilityError ? "Unable to check review eligibility. Reload to try again."
+    : eligibility?.code === "cooldown" && eligibility.available_at
+      ? `You can review again after ${new Date(eligibility.available_at).toLocaleString()}.`
+      : eligibility?.message ?? "Share your experience";
+
   const handleReviewSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["review-eligibility", id] });
     queryClient.invalidateQueries({ queryKey: ["reviews", id] });
     queryClient.invalidateQueries({ queryKey: ["listing", id] });
     toast.success("Review submitted! AI analysis is running in the background.");
@@ -849,11 +873,12 @@ export default function ListingDetailPage() {
                     </div>
                   ) : user?.role === "student" ? (
                     <div className="bg-slate-900 rounded-2xl p-5 flex items-center justify-between">
-                      <p className="text-white text-sm font-medium">Share your experience</p>
+                      <p className="text-white text-sm font-medium">{reviewMessage}</p>
                       <Button
                         size="sm"
                         className="bg-white text-slate-900 hover:bg-slate-100 rounded-xl"
                         onClick={() => setReviewModalOpen(true)}
+                        disabled={!eligibility?.can_review || eligibilityPending || eligibilityError}
                       >
                         Write a review
                       </Button>

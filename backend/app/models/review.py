@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, UniqueConstraint, Float, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Index, Float, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
@@ -22,9 +22,10 @@ class Review(Base):
     deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     cooldown_expires_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Enforce one review per student per accommodation
+    # Enforce one non-deleted review per student per accommodation
     __table_args__ = (
-        UniqueConstraint('student_id', 'accommodation_id', name='uix_student_accommodation_review'),
+        Index('uix_student_accommodation_review', 'student_id', 'accommodation_id', unique=True,
+              postgresql_where=deleted_at.is_(None), sqlite_where=deleted_at.is_(None)),
     )
 
     # Relationships

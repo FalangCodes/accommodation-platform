@@ -13,11 +13,12 @@ from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.models.moderation import ModerationLog
 from app.models.landlord import Landlord
+from app.models.student import Student
 from datetime import datetime, timezone
 from app.models.moderation import ModerationLog, Appeal
 from app.core.dependencies import get_current_moderator
 from app.schemas.moderation import AppealOut, AppealResolveBody
-from app.services.cache_service import cache_delete_pattern, cache_delete, key_listing
+from app.services.cache_service import cache_delete_pattern, cache_delete, key_listing, key_reviews, key_analytics
 
 router = APIRouter(prefix="/moderation", tags=["Moderation"])
 
@@ -434,7 +435,7 @@ async def resolve_appeal(
     if body.decision not in ("upheld", "dismissed"):
         raise HTTPException(status_code=400, detail="Decision must be 'upheld' or 'dismissed'")
 
-    result = await db.execute(select(Appeal).where(Appeal.id == appeal_id))
+    result = await db.execute(select(Appeal).where(Appeal.id == appeal_id).with_for_update())
     appeal = result.scalar_one_or_none()
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
@@ -445,16 +446,28 @@ async def resolve_appeal(
     appeal.assigned_admin_id = current_user.id
     appeal.resolved_at = datetime.now(timezone.utc)
 
+    restored_review_listing = None
+
     # Automatically restore the resource if upheld
     if body.decision == "upheld":
         if appeal.resource_type == "review":
             res = await db.execute(select(Review).where(Review.id == appeal.resource_id))
             review = res.scalar_one_or_none()
             if review:
+                # Serialize restoration with review submission/deletion for this student.
+                await db.execute(select(Student).where(Student.id == review.student_id).with_for_update())
+                conflict = await db.execute(select(Review.id).where(
+                    Review.student_id == review.student_id,
+                    Review.accommodation_id == review.accommodation_id,
+                    Review.deleted_at.is_(None), Review.id != review.id,
+                ).limit(1))
+                if conflict.scalar_one_or_none() is not None:
+                    await db.rollback()
+                    raise HTTPException(status_code=409, detail="A newer active review exists. The old review cannot be restored.")
                 review.deleted_at = None
                 review.deleted_by = None
                 review.status = "released"
-                await cache_delete_pattern(f"reviews:{review.accommodation_id}")
+                restored_review_listing = review.accommodation_id
         elif appeal.resource_type == "listing":
             res = await db.execute(select(Accommodation).where(Accommodation.id == appeal.resource_id))
             acc = res.scalar_one_or_none()
@@ -472,6 +485,9 @@ async def resolve_appeal(
     )
     db.add(log_entry)
     await db.commit()
+    if restored_review_listing is not None:
+        await cache_delete(key_reviews(restored_review_listing), key_listing(restored_review_listing), key_analytics(restored_review_listing))
+        await cache_delete_pattern("search:*")
 
     return {"detail": f"Appeal {body.decision}", "appeal_id": appeal_id}
 
