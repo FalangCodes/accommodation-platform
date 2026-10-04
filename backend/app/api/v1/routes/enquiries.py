@@ -14,6 +14,7 @@ from app.models.student import Student
 from app.models.landlord import Landlord
 from app.services.resource_access import visible_accommodation
 from app.services.email_service import send_email
+from app.services.enquiry_email import build_enquiry_email
 from app.services.enquiry_service import claim_enquiry, complete_enquiry, message_digest
 
 router = APIRouter(prefix="/accommodations", tags=["Enquiries"])
@@ -47,22 +48,21 @@ async def send_enquiry(
     ))).scalar_one_or_none()
     if not owner:
         raise HTTPException(status_code=409, detail="This listing cannot receive enquiries at the moment.")
+    name = " ".join(part for part in (student.first_name, student.last_name) if part) or "Student"
+    try:
+        subject, email_body, html_body = build_enquiry_email(
+            listing.title, f"{settings.FRONTEND_URL.rstrip('/')}/listings/{listing.id}",
+            name, current_user.email, body.message,
+        )
+    except ValueError:
+        raise HTTPException(status_code=503, detail="Enquiries are temporarily unavailable. Please try again later.") from None
     digest = message_digest(listing.id, body.message)
     request_key, already_sent = await claim_enquiry(current_user.id, listing.id, idempotency_key, digest)
     if already_sent:
         return {"detail": "Your enquiry has already been sent to the landlord."}
-    name = " ".join(part for part in (student.first_name, student.last_name) if part) or "Student"
-    email_body = (
-        f"New student enquiry through AccomFind\n\nListing: {listing.title}\n"
-        f"Listing link: {settings.FRONTEND_URL.rstrip('/')}/listings/{listing.id}\n\n"
-        f"Student: {name}\nStudent email: {current_user.email}\n\n"
-        f"Enquiry:\n{body.message}\n\n"
-        "Reply to this email to respond directly to the student.\n"
-        "The student consented to sharing their name and email for this enquiry.\n"
-    )
     try:
-        await send_email(owner.email, f"AccomFind enquiry for listing #{listing.id}", email_body,
-                         reply_to=current_user.email)
+        await send_email(owner.email, subject, email_body,
+                         reply_to=current_user.email, html_body=html_body)
     except Exception:
         try:
             await complete_enquiry(request_key, digest, "failed")

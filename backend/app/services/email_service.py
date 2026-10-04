@@ -10,7 +10,8 @@ async def send_auth_email(recipient: str, subject: str, body: str) -> None:
     await send_email(recipient, subject, body)
 
 
-async def send_email(recipient: str, subject: str, body: str, *, reply_to: str | None = None) -> None:
+async def send_email(recipient: str, subject: str, body: str, *, reply_to: str | None = None,
+                     html_body: str | None = None) -> None:
     if not settings.SMTP_HOST or not settings.SMTP_FROM:
         raise RuntimeError("SMTP delivery is not configured")
     if settings.SMTP_SSL and settings.SMTP_STARTTLS:
@@ -23,6 +24,8 @@ async def send_email(recipient: str, subject: str, body: str, *, reply_to: str |
     if reply_to:
         message["Reply-To"] = reply_to
     message.set_content(body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
 
     def deliver():
         context = ssl.create_default_context()

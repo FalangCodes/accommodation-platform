@@ -65,8 +65,9 @@ async def enquiries_app(isolated_reviews, monkeypatch):
         return IsolatedRedis()
 
     sent = []
-    async def capture(recipient, subject, body, *, reply_to=None):
-        sent.append({"recipient": recipient, "subject": subject, "body": body, "reply_to": reply_to})
+    async def capture(recipient, subject, body, *, reply_to=None, html_body=None):
+        sent.append({"recipient": recipient, "subject": subject, "body": body, "reply_to": reply_to,
+                     "html_body": html_body})
         await asyncio.sleep(0.05)
 
     monkeypatch.setattr(enquiry_service, "get_redis", isolated_redis)
@@ -97,6 +98,9 @@ async def test_private_recipient_verified_reply_to_and_consent(enquiries_app):
     assert len(sent) == 1
     assert sent[0]["recipient"] == "owner@example.test"
     assert sent[0]["reply_to"] == "test@spu.ac.za"
+    assert sent[0]["subject"] == "Accommodation enquiry: Test listing"
+    assert "Sent from this student account" in sent[0]["html_body"]
+    assert "The student consented" not in sent[0]["body"]
     assert "Test Student" in sent[0]["body"] and "test@spu.ac.za" in sent[0]["body"]
     assert BODY["message"] in sent[0]["body"] and "https://frontend.example.test/listings/1" in sent[0]["body"]
     assert "owner@example.test" not in response.text
@@ -241,6 +245,15 @@ async def test_smtp_from_and_reply_to_headers_are_correct(enquiries_app, monkeyp
     assert captured[0]["From"] == "sender@example.test"
     assert captured[0]["To"] == "owner@example.test"
     assert captured[0]["Reply-To"] == "test@spu.ac.za"
+    assert captured[0]["Subject"] == "Accommodation enquiry: Test listing"
+    assert captured[0].get_content_type() == "multipart/alternative"
+    assert BODY["message"] in captured[0].get_body(preferencelist=("plain",)).get_content()
+    assert "View listing" in captured[0].get_body(preferencelist=("html",)).get_content()
+
+    # Authentication messages retain their existing plain-text construction.
+    await email_service.send_auth_email("student@example.test", "Verify your email", "Verification link")
+    assert captured[1].get_content_type() == "text/plain"
+    assert captured[1]["Reply-To"] is None
 
 
 @pytest.mark.asyncio

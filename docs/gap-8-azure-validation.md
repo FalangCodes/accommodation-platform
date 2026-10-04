@@ -10,8 +10,13 @@ specified by the client; unknown fields are rejected. The message must contain
 that the student's name and verified email will be shared with the landlord.
 
 SMTP uses the existing configured AccomFind sender, the landlord as To, and the
-verified student email as Reply-To. The plain-text body includes the listing
-title/link, student name/email and enquiry. Responses never expose landlord
+verified student email as Reply-To. The subject is `Accommodation enquiry: <listing
+title>`, normalized to a single safe line and limited to 100 characters. The
+email includes a styled HTML version and plain-text fallback with the original
+message paragraphs, listing title/link and student account name/verified email.
+The HTML escapes all user content, uses inline styling and a View listing button,
+and contains no tracking images. The consent checkbox remains required; its
+confirmation sentence is omitted from the email. Responses never expose landlord
 email, phone, SMTP diagnostics or configuration. No schema change or additional
 environment variable is needed.
 
