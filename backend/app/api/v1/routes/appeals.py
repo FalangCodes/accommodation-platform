@@ -13,7 +13,7 @@ from app.models.accommodation import Accommodation
 from app.models.review import Review
 from app.models.moderation import Appeal, ModerationLog
 from app.schemas.moderation import AppealCreate, AppealOut
-from app.services.appeal_policy import validate_current_penalty, ensure_quarantine_action
+from app.services.appeal_policy import validate_current_penalty, ensure_quarantine_action, latest_action
 
 router = APIRouter(prefix="/appeals", tags=["Appeals"])
 
@@ -98,20 +98,8 @@ async def submit_appeal(
             raise HTTPException(status_code=422, detail="The moderation action does not match this item.")
         resolved_action_id = log_entry.id
     else:
-        # Auto-resolve: find the most recent log entry for this resource
-        # Note: ModerationLog saves listings under 'accommodation'
-        lookup_type = "accommodation" if body.resource_type == "listing" else body.resource_type
-        
-        log_result = await db.execute(
-            select(ModerationLog)
-            .where(
-                ModerationLog.resource_type == lookup_type,
-                ModerationLog.resource_id == body.resource_id,
-            )
-            .order_by(ModerationLog.id.desc())
-            .limit(1)
-        )
-        log_entry = log_result.scalar_one_or_none()
+        # Closing an older appeal does not hide a newer resource penalty.
+        log_entry = await latest_action(db, body.resource_type, body.resource_id)
         if not log_entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
