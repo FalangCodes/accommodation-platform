@@ -1,3 +1,4 @@
+from app.services.insight_refresh import refresh_listing_insights
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -15,7 +16,7 @@ from app.core.dependencies import get_current_landlord
 from app.models.review import Review, ReviewReply, ReviewNLPResult
 from app.schemas.review import ReviewCreate, ReviewResponse, ReviewReplyCreate, ReviewReplyResponse
 from app.services.review_service import process_review_nlp
-from app.services.cache_service import cache_delete, cache_delete_pattern, key_listing, key_reviews, key_analytics, cache_get, cache_set, TTL_REVIEWS
+from app.services.cache_service import cache_delete, cache_delete_pattern, key_listing, key_reviews, key_analytics, cache_get, cache_set, TTL_REVIEWS, key_featured, key_activity, key_platform_stats
 
 from app.services.guest_access import reviews_response
 from app.services.resource_access import visible_accommodation
@@ -63,7 +64,7 @@ async def submit_review(
     await cache_delete(
     key_listing(review_in.accommodation_id),
     key_reviews(review_in.accommodation_id),
-    key_analytics(review_in.accommodation_id),
+    key_analytics(review_in.accommodation_id), key_featured(), key_activity(), key_platform_stats(),
     )
     await cache_delete_pattern("search:*")
     await db.refresh(new_review)
@@ -285,11 +286,13 @@ async def delete_review(
     review.cooldown_expires_at = now + timedelta(days=14)
 
     await db.commit()
+    await refresh_listing_insights(review.accommodation_id, db)
     await cache_delete(
     key_listing(review.accommodation_id),
     key_reviews(review.accommodation_id),
-    key_analytics(review.accommodation_id),
+    key_analytics(review.accommodation_id), key_featured(), key_activity(), key_platform_stats(),
 )
+    await cache_delete_pattern("search:*")
 
 @router.post("/{review_id}/reply", response_model=ReviewReplyResponse, status_code=status.HTTP_201_CREATED)
 async def reply_to_review(

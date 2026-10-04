@@ -17,7 +17,7 @@ from app.models.review import Review, ReviewNLPResult
 from app.models.moderation import ModerationLog
 from app.core.security import get_password_hash
 from app.core.encryption import decrypt_value
-from app.services.cache_service import get_today_views
+from app.services.cache_service import total_listing_views
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -199,14 +199,9 @@ async def get_universities_tree(
             )
             landlord = landlord_result.scalar_one_or_none()
 
-            # Get view count
-            view_result = await db.execute(
-                select(func.count(AccommodationView.id)).where(
-                    AccommodationView.accommodation_id == acc.id
-                )
-            )
-            db_views = view_result.scalar() or 0
-            today_views = await get_today_views(acc.id)
+            db_views = await total_listing_views(db, acc.id)
+            today_views = 0
+            await db.commit()  # Release the per-listing handoff lock before the next listing.
 
             # Get review stats
             review_result = await db.execute(
@@ -497,11 +492,4 @@ async def get_accommodation_views(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(func.count(AccommodationView.id)).where(
-            AccommodationView.accommodation_id == accommodation_id
-        )
-    )
-    db_views = result.scalar() or 0
-    today_views = await get_today_views(accommodation_id)
-    return {"total_views": db_views + today_views}
+    return {"total_views": await total_listing_views(db, accommodation_id)}

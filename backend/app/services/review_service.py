@@ -15,7 +15,7 @@ from sqlalchemy.future import select
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import IntegrityError
 from app.services.appeal_policy import record_quarantine
-from app.services.cache_service import cache_delete, cache_delete_pattern, key_reviews, key_listing, key_analytics
+from app.services.cache_service import cache_delete, cache_delete_pattern, key_reviews, key_listing, key_analytics, key_featured, key_activity, key_platform_stats
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,12 +107,13 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
                 review.status = "analysed"
 
             await session.commit()
-            await cache_delete(key_reviews(review.accommodation_id), key_listing(review.accommodation_id), key_analytics(review.accommodation_id))
-            await cache_delete_pattern("search:*")
+            try:
+                await regenerate_accommodation_insights(review.accommodation_id, session)
+            finally:
+                await cache_delete(key_reviews(review.accommodation_id), key_listing(review.accommodation_id), key_analytics(review.accommodation_id), key_featured(), key_activity(), key_platform_stats())
+                await cache_delete_pattern("search:*")
             logger.info(f"[ReviewService] NLP complete for review {review_id} — status={review.status}")
 
-            # ── Regenerate accommodation-level insights ────────────────────────────
-            await regenerate_accommodation_insights(review.accommodation_id, session)
 
         except Exception as e:
             await session.rollback()

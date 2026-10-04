@@ -492,9 +492,12 @@ async def regenerate_accommodation_insights(
     Aggregate all NLP results for an accommodation into structured insights.
     Upserts accommodation_insights table.
     """
+    from sqlalchemy import text
+    await db.execute(text("SELECT pg_advisory_xact_lock(193732, :listing)"),
+                     {"listing": accommodation_id})
     result = await db.execute(
         select(Review, ReviewNLPResult)
-        .join(ReviewNLPResult, ReviewNLPResult.review_id == Review.id)
+        .outerjoin(ReviewNLPResult, ReviewNLPResult.review_id == Review.id)
         .where(
             Review.accommodation_id == accommodation_id,
             Review.deleted_at == None,
@@ -502,9 +505,6 @@ async def regenerate_accommodation_insights(
         )
     )
     rows = result.all()
-
-    if not rows:
-        return
 
     total_reviews = len(rows)
 
@@ -522,9 +522,15 @@ async def regenerate_accommodation_insights(
     }
 
     for review, nlp in rows:
-        if not nlp.aspect_details:
+        if nlp is None:
             continue
-        for aspect, detail in nlp.aspect_details.items():
+        details = getattr(nlp, "aspect_details", None) or extract_aspect_details(
+            aspects=nlp.aspects or {}, review_body=review.body,
+            overall_sentiment=nlp.sentiment, sentiment_score=nlp.sentiment_score,
+        )
+        if not details:
+            continue
+        for aspect, detail in details.items():
             if aspect not in aspect_data:
                 continue
             d = aspect_data[aspect]

@@ -101,6 +101,7 @@ async def increment_view(accommodation_id: int) -> None:
     try:
         redis = await get_redis()
         await redis.incr(key_views(accommodation_id))
+        await redis.delete(key_analytics(accommodation_id))
     except Exception as e:
         print(f"View increment failed for {accommodation_id}: {e}")
 
@@ -114,42 +115,90 @@ async def get_today_views(accommodation_id: int) -> int:
         print(f"Get views failed for {accommodation_id}: {e}")
         return 0
 
-async def flush_views_to_db(db) -> None:
-    """Flush all Redis view counters to the accommodation_views table."""
+# A retained Redis batch remains until PostgreSQL commits. Its stable marker uses
+# the existing viewer_ip_hash column so retries need no schema migration.
+_CLAIM_VIEWS = """
+local pending = redis.call('GET', KEYS[2])
+if pending then return pending end
+local count = tonumber(redis.call('GET', KEYS[1]) or '0')
+if count <= 0 then return nil end
+local batch = cjson.encode({count=count, marker=ARGV[1]})
+redis.call('SET', KEYS[2], batch)
+redis.call('DEL', KEYS[1])
+return batch
+"""
+_ACK_VIEWS = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+
+def key_view_batch(accommodation_id: int) -> str:
+    return f"view-batch:{accommodation_id}"
+
+
+async def _lock_views(db, accommodation_id):
+    from sqlalchemy import text
+    await db.execute(text("SELECT pg_advisory_xact_lock(193731, :listing)"),
+                     {"listing": accommodation_id})
+
+
+async def total_listing_views(db, accommodation_id: int) -> int:
+    """Read committed and buffered counts while serializing batch handoffs."""
+    from sqlalchemy import select, func
+    from app.models.accommodation import AccommodationView
+    await _lock_views(db, accommodation_id)
+    count = (await db.execute(select(func.count(AccommodationView.id)).where(
+        AccommodationView.accommodation_id == accommodation_id))).scalar() or 0
     try:
         redis = await get_redis()
-        keys = await redis.keys("views:*")
-        if not keys:
-            print("No view counters to flush")
-            return
+        buffered = await redis.get(key_views(accommodation_id))
+        count += int(buffered or 0)
+        pending = await redis.get(key_view_batch(accommodation_id))
+        if pending:
+            batch = json.loads(pending)
+            persisted = (await db.execute(select(func.count(AccommodationView.id)).where(
+                AccommodationView.accommodation_id == accommodation_id,
+                AccommodationView.viewer_ip_hash == batch["marker"]))).scalar() or 0
+            count += max(0, int(batch["count"]) - persisted)
+    except Exception as error:
+        print(f"Buffered view lookup failed for {accommodation_id}: {error}")
+    return count
 
-        from app.models.accommodation import AccommodationView
-        from datetime import datetime, timezone
-        import hashlib
 
-        for key in keys:
-            accommodation_id = int(key.split(":")[1])
-            count = await redis.get(key)
-            if not count or int(count) == 0:
+async def flush_views_to_db(db) -> None:
+    """Retry retained batches; acknowledge only after a successful DB commit."""
+    import uuid
+    from sqlalchemy import select, func
+    from app.models.accommodation import AccommodationView
+    redis = await get_redis()
+    listing_ids = set()
+    for pattern in ("views:*", "view-batch:*"):
+        async for key in redis.scan_iter(match=pattern):
+            suffix = key.rsplit(":", 1)[-1]
+            if suffix.isdigit():
+                listing_ids.add(int(suffix))
+    for accommodation_id in sorted(listing_ids):
+        try:
+            await _lock_views(db, accommodation_id)
+            raw = await redis.eval(_CLAIM_VIEWS, 2, key_views(accommodation_id),
+                                   key_view_batch(accommodation_id), "batch:" + uuid.uuid4().hex)
+            if not raw:
+                await db.commit()
                 continue
-
-            count = int(count)
-
-            # Insert one row per view count
-            for _ in range(count):
-                view = AccommodationView(
-                    accommodation_id=accommodation_id,
-                    viewer_ip_hash=hashlib.md5(b"buffered").hexdigest(),
-                    viewed_at=datetime.now(timezone.utc)
-                )
-                db.add(view)
-
-            # Reset counter
-            await redis.delete(key)
-            print(f"Flushed {count} views for accommodation {accommodation_id}")
-
-        await db.commit()
-        print("View flush complete")
-
-    except Exception as e:
-        print(f"View flush failed: {e}")
+            batch = json.loads(raw)
+            persisted = (await db.execute(select(func.count(AccommodationView.id)).where(
+                AccommodationView.accommodation_id == accommodation_id,
+                AccommodationView.viewer_ip_hash == batch["marker"]))).scalar() or 0
+            # Partial inserts cannot commit: all rows in a batch share one transaction.
+            if not persisted:
+                db.add_all([AccommodationView(accommodation_id=accommodation_id,
+                            viewer_ip_hash=batch["marker"]) for _ in range(int(batch["count"]))])
+            await db.commit()
+            await redis.eval(_ACK_VIEWS, 1, key_view_batch(accommodation_id), raw)
+            await cache_delete(key_analytics(accommodation_id), key_featured())
+        except Exception as error:
+            await db.rollback()
+            print(f"View flush failed for {accommodation_id}; batch retained: {error}")

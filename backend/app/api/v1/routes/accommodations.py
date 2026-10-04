@@ -15,8 +15,8 @@ from app.models.review import Review, ReviewNLPResult
 from app.schemas.accommodation import AccommodationCreate, AccommodationResponse
 from app.services.storage_service import upload_image, delete_image
 from app.services.cache_service import (
-    cache_get, cache_set, cache_delete, cache_delete_pattern, get_today_views,
-    key_search, key_listing, key_reviews, key_analytics, increment_view,
+    cache_get, cache_set, cache_delete, cache_delete_pattern,
+    key_search, key_listing, key_reviews, key_analytics, increment_view, total_listing_views,
     key_platform_stats, key_featured, key_activity,
     TTL_SEARCH, TTL_LISTING, TTL_REVIEWS, TTL_ANALYTICS, TTL_FEATURED, TTL_ACTIVITY
 )
@@ -155,7 +155,7 @@ async def search_accommodations(
                 ORDER BY display_order ASC LIMIT 1) AS cover_image
             FROM accommodations a
             JOIN universities u ON u.id = :university_id
-            LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL
+            LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL AND r.status IN ('analysed', 'released')
             WHERE a.status = 'approved'
             AND ST_DWithin(a.location, u.campus_location, :radius_meters)
         """
@@ -181,7 +181,7 @@ async def search_accommodations(
                 WHERE accommodation_id = a.id
                 ORDER BY display_order ASC LIMIT 1) AS cover_image
             FROM accommodations a
-            LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL
+            LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL AND r.status IN ('analysed', 'released')
             WHERE a.status = 'approved'
         """
         group_by = """
@@ -280,7 +280,7 @@ async def get_my_accommodations(
         reviews_result = await db.execute(
             select(Review).where(
                 Review.accommodation_id == acc.id,
-                Review.deleted_at == None
+                Review.deleted_at == None, Review.status.in_(["analysed", "released"])
             )
         )
         reviews = reviews_result.scalars().all()
@@ -330,11 +330,11 @@ async def get_platform_stats(
     )
     total_listings = listings_result.scalar() or 0
 
-    # Total non-deleted reviews
+    # Total published reviews on approved listings
     reviews_result = await db.execute(
         select(func.count()).where(
-            Review.deleted_at == None
-        ).select_from(Review)
+            Review.deleted_at == None, Review.status.in_(["analysed", "released"])
+        ).select_from(Review).join(Accommodation, Accommodation.id == Review.accommodation_id).where(Accommodation.status == "approved")
     )
     total_reviews = reviews_result.scalar() or 0
 
@@ -389,7 +389,7 @@ async def get_featured_listings(
                 ) AS first_image_url
             FROM accommodations a
             LEFT JOIN reviews r
-                ON r.accommodation_id = a.id AND r.deleted_at IS NULL
+                ON r.accommodation_id = a.id AND r.deleted_at IS NULL AND r.status IN ('analysed', 'released')
             LEFT JOIN accommodation_views av
                 ON av.accommodation_id = a.id
             WHERE a.status = 'approved'
@@ -443,7 +443,7 @@ async def get_activity_feed(
             FROM reviews r
             JOIN accommodations a ON a.id = r.accommodation_id
             WHERE r.deleted_at IS NULL
-              AND r.status != 'pending_analysis'
+              AND r.status IN ('analysed', 'released')
               AND a.status = 'approved'
             ORDER BY RANDOM()
             LIMIT 8
@@ -492,21 +492,15 @@ async def get_analytics(
     cache_key = key_analytics(accommodation_id)
     cached = await cache_get(cache_key)
     if cached is not None:
+        cached["total_views"] = await total_listing_views(db, accommodation_id)
         return cached
 
-    # 2. Total views
-    query = select(func.count(AccommodationView.id)).where(
-    AccommodationView.accommodation_id == accommodation_id
-    )
-    result = await db.execute(query)
-    db_views = result.scalar() or 0
-    today_views = await get_today_views(accommodation_id)
-    total_views = db_views + today_views
+    total_views = await total_listing_views(db, accommodation_id)
 
     # 3. Reviews stats
     query = select(Review).where(
         Review.accommodation_id == accommodation_id,
-        Review.deleted_at == None
+        Review.deleted_at == None, Review.status.in_(["analysed", "released"])
     )
     result = await db.execute(query)
     reviews = result.scalars().all()
@@ -620,7 +614,7 @@ async def get_accommodation(
     reviews_result = await db.execute(
         select(Review).where(
             Review.accommodation_id == accommodation_id,
-            Review.deleted_at == None
+            Review.deleted_at == None, Review.status.in_(["analysed", "released"])
         )
     )
     reviews = reviews_result.scalars().all()

@@ -122,12 +122,17 @@ def resources(monkeypatch):
     async def increment(accommodation_id):
         effects.append("view_increment")
 
+    async def view_total(db, accommodation_id):
+        effects.append("view_total")
+        return 99
+
     for module in (accommodations, reviews):
         monkeypatch.setattr(module, "cache_get", get)
     monkeypatch.setattr(accommodations, "cache_delete", remove)
     monkeypatch.setattr(accommodations, "cache_delete_pattern", remove_pattern)
     monkeypatch.setattr(accommodations, "delete_image", delete_blob)
     monkeypatch.setattr(accommodations, "increment_view", increment)
+    monkeypatch.setattr(accommodations, "total_listing_views", view_total)
     application = FastAPI()
     for module in (accommodations, reviews, appeals):
         application.include_router(module.router, prefix="/api/v1")
@@ -209,6 +214,7 @@ async def test_analytics_cache_does_not_bypass_ownership(resources):
     app, headers, _, _, effects, _ = resources
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/v1/accommodations/1/analytics", headers=headers("other_landlord"))).status_code == 403
+        assert "view_total" not in effects
         assert not effects
         response = await client.get("/api/v1/accommodations/1/analytics", headers=headers("owner"))
         assert response.json()["total_views"] == 99

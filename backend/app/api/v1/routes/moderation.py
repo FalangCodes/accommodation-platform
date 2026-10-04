@@ -1,3 +1,4 @@
+from app.services.insight_refresh import refresh_listing_insights
 from app.services.document_links import ownership_document_link, landlord_document_link
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,9 @@ class ModerationDecision(BaseModel):
     reason: Optional[str] = None
 
 
-async def invalidate_listing(listing_id, reviews_changed=False):
+async def invalidate_listing(listing_id, reviews_changed=False, db=None):
+    if reviews_changed and db is not None:
+        await refresh_listing_insights(listing_id, db)
     keys = [key_listing(listing_id), key_analytics(listing_id), key_featured(), key_activity(), key_platform_stats()]
     if reviews_changed:
         keys.append(key_reviews(listing_id))
@@ -247,7 +250,7 @@ async def remove_review(
     db.add(log)
     await db.commit()
 
-    await invalidate_listing(review.accommodation_id, reviews_changed=True)
+    await invalidate_listing(review.accommodation_id, reviews_changed=True, db=db)
 
     return {"message": f"Review {review_id} removed", "reason": decision.reason}
 
@@ -504,7 +507,7 @@ async def resolve_appeal(
                          resource_id=appeal.resource_id, reason=body.reason))
     await db.commit()
     if listing_id is not None:
-        await invalidate_listing(listing_id, reviews_changed=reviews_changed)
+        await invalidate_listing(listing_id, reviews_changed=reviews_changed, db=db)
     elif body.decision == "upheld" and appeal.resource_type == "landlord":
         affected = await db.execute(select(Accommodation.id).where(Accommodation.landlord_id == appeal.resource_id))
         for affected_id in affected.scalars().all():
@@ -539,6 +542,6 @@ async def release_review(
     db.add(log_entry)
     await db.commit()
 
-    await invalidate_listing(review.accommodation_id, reviews_changed=True)
+    await invalidate_listing(review.accommodation_id, reviews_changed=True, db=db)
 
     return {"detail": "Review released and now publicly visible", "review_id": review_id}
