@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -14,6 +14,7 @@ from app.schemas.auth import LoginRequest, RefreshRequest, StudentCreate, Landlo
 from app.core.config import settings
 from app.schemas.auth import AuthEmailRequest, EmailTokenRequest, ResetPasswordRequest
 from app.services.auth_email_service import issue_email_token, consume_email_token, now
+from app.services.auth_rate_limit import enforce_auth_limit
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,8 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.post("/register/student", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_student(student_in: StudentCreate, db: AsyncSession = Depends(get_db)):
+async def register_student(student_in: StudentCreate, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "registration", student_in.email)
 
     query = select(User).where(func.lower(User.email) == student_in.email)
     result = await db.execute(query)
@@ -70,7 +72,8 @@ async def register_student(student_in: StudentCreate, db: AsyncSession = Depends
     return new_user
 
 @router.post("/login", response_model=tokenResponse)
-async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(credentials: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "login", credentials.email)
     
     # 1. Find the user
     query = select(User).where(func.lower(User.email) == str(credentials.email).lower())
@@ -96,7 +99,8 @@ async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=tokenResponse)
-async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(payload: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "refresh")
 
     # 1. Decode and validate the refresh token
     try:
@@ -143,7 +147,8 @@ from app.core.encryption import encrypt_value
 
 
 @router.post("/resend-verification")
-async def resend_verification(payload: AuthEmailRequest, db: AsyncSession = Depends(get_db)):
+async def resend_verification(payload: AuthEmailRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "email", payload.email)
     result = await db.execute(select(User).where(func.lower(User.email) == payload.email))
     user = result.scalar_one_or_none()
     if user and user.role == "student" and user.email_verified_at is None:
@@ -157,7 +162,8 @@ async def resend_verification(payload: AuthEmailRequest, db: AsyncSession = Depe
 
 
 @router.post("/verify-email")
-async def verify_email(payload: EmailTokenRequest, db: AsyncSession = Depends(get_db)):
+async def verify_email(payload: EmailTokenRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "token")
     user = await consume_email_token(db, payload.token, "verify_email")
     user.email_verified_at = now()
     result = await db.execute(select(Student).where(Student.user_id == user.id))
@@ -169,7 +175,8 @@ async def verify_email(payload: EmailTokenRequest, db: AsyncSession = Depends(ge
 
 
 @router.post("/request-password-reset")
-async def request_password_reset(payload: AuthEmailRequest, db: AsyncSession = Depends(get_db)):
+async def request_password_reset(payload: AuthEmailRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "email", payload.email)
     result = await db.execute(select(User).where(func.lower(User.email) == payload.email))
     user = result.scalar_one_or_none()
     if user:
@@ -183,7 +190,8 @@ async def request_password_reset(payload: AuthEmailRequest, db: AsyncSession = D
 
 
 @router.post("/reset-password")
-async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def reset_password(payload: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "token")
     user = await consume_email_token(db, payload.token, "reset_password")
     user.password_hash = get_password_hash(payload.password)
     user.token_version += 1
@@ -191,7 +199,8 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
     return {"message": "Your password has been reset. Sign in with your new password."}
 
 @router.post("/register/landlord", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_landlord(landlord_in: LandlordCreate, db: AsyncSession = Depends(get_db)):
+async def register_landlord(landlord_in: LandlordCreate, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "registration", landlord_in.email)
 
     query = select(User).where(func.lower(User.email) == landlord_in.email)
     result = await db.execute(query)
@@ -228,7 +237,8 @@ async def register_landlord(landlord_in: LandlordCreate, db: AsyncSession = Depe
     return new_user
 
 @router.post("/register/moderator", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_moderator(moderator_in: ModeratorCreate, db: AsyncSession = Depends(get_db)):
+async def register_moderator(moderator_in: ModeratorCreate, request: Request, db: AsyncSession = Depends(get_db)):
+    await enforce_auth_limit(request, "registration", moderator_in.email)
 
     # 1. Validate invite key
     if moderator_in.invite_key != settings.MODERATOR_INVITE_KEY:

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    AUTH_TRUSTED_PROXY_IPS: str = ""
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379")
     NLP_SERVICE_URL: str = os.getenv("NLP_SERVICE_URL", "http://nlp:8001")
     DEFAULT_SEARCH_RADIUS_KM: int = 5

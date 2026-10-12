@@ -147,3 +147,23 @@ test("verification and reset pages retain their email links when sessions end", 
     assert.deepEqual(events, ["account_inactive"]);
   }
 });
+
+for (const status of [429, 503]) {
+  test(`refresh ${status} preserves session and allows a later retry`, async () => {
+    const { api, events } = browser();
+    const previous = axios.defaults.adapter;
+    axios.defaults.adapter = (config) => failure(config, status);
+    api.defaults.adapter = (config) => config.headers.Authorization === "Bearer new-access"
+      ? Promise.resolve(success(config)) : failure(config, 401);
+    try {
+      await assert.rejects(api.get("/protected"), (error) => error.response.status === status);
+      assert.equal(localStorage.getItem("access_token"), "old-access");
+      assert.equal(localStorage.getItem("refresh_token"), "old-refresh");
+      assert.deepEqual(events, []);
+      axios.defaults.adapter = (config) => Promise.resolve(success(config, {
+        access_token: "new-access", refresh_token: "new-refresh",
+      }));
+      assert.equal((await api.get("/protected")).status, 200);
+    } finally { axios.defaults.adapter = previous; }
+  });
+}

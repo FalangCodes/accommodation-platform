@@ -1,7 +1,7 @@
 import axios from "axios";
 import { endSession } from "./session";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://40.123.252.250:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.kgotsofalangkakudi.co.za";
 
 // Public authentication requests should not trigger session refresh or redirects.
 const publicAuthApi = axios.create({ baseURL: API_BASE_URL });
@@ -61,6 +61,11 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${accessToken}`;
         return api(original);
       } catch (refreshError: unknown) {
+        // A temporary throttle/storage outage must not erase a valid session.
+        if (axios.isAxiosError(refreshError) &&
+            (refreshError.response?.status === 429 || refreshError.response?.status === 503)) {
+          return Promise.reject(refreshError);
+        }
         if (localStorage.getItem("refresh_token") === refreshToken) {
           const refreshFailure = axios.isAxiosError(refreshError)
             ? refreshError.response?.headers?.["x-auth-error"] : undefined;

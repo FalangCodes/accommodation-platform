@@ -20,11 +20,13 @@ services:
   backend:
     build: ./backend
     container_name: accommodation_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/accommodation_db
       REDIS_URL: redis://redis:6379
+      AUTH_TRUSTED_PROXY_IPS: ${AUTH_TRUSTED_PROXY_IPS:-}
       SECRET_KEY: ${SECRET_KEY}
       MODERATOR_INVITE_KEY: ${MODERATOR_INVITE_KEY}
       AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}

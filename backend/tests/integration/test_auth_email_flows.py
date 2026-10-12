@@ -53,6 +53,12 @@ class AwaitedSession:
 
 @pytest.fixture
 def setup(monkeypatch):
+    from app.api.v1.routes import auth
+
+    async def isolated_limit(*args):
+        pass
+
+    monkeypatch.setattr(auth, "enforce_auth_limit", isolated_limit)
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE universities (id INTEGER PRIMARY KEY, domain VARCHAR NOT NULL)"))
