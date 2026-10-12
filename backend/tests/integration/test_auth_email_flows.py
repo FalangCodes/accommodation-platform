@@ -59,6 +59,7 @@ def setup(monkeypatch):
         pass
 
     monkeypatch.setattr(auth, "enforce_auth_limit", isolated_limit)
+    monkeypatch.setattr(auth, "reset_login_failures", isolated_limit)
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE universities (id INTEGER PRIMARY KEY, domain VARCHAR NOT NULL)"))

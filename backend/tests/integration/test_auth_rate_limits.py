@@ -26,6 +26,9 @@ async def private_limits(setup, monkeypatch):
     redis = redis_async.from_url(settings.REDIS_URL, decode_responses=True)
 
     class PrivateRedis:
+        async def delete(self, key):
+            return await redis.delete(prefix + key)
+
         async def eval(self, script, count, *args):
             return await redis.eval(script, count,
                                     *(prefix + key for key in args[:count]), *args[count:])
@@ -35,6 +38,7 @@ async def private_limits(setup, monkeypatch):
 
     monkeypatch.setattr(limiter, "get_redis", isolated_redis)
     monkeypatch.setattr(auth, "enforce_auth_limit", limiter.enforce_auth_limit)
+    monkeypatch.setattr(auth, "reset_login_failures", limiter.reset_login_failures)
     monkeypatch.setattr(settings, "AUTH_TRUSTED_PROXY_IPS", "")
     monkeypatch.setattr(settings, "MODERATOR_INVITE_KEY", "rate-limit-test-invite")
     try:
@@ -61,7 +65,7 @@ async def test_concurrent_account_budget_and_case_normalisation(private_limits):
             return error.status_code
 
     results = await asyncio.gather(*(attempt(i) for i in range(20)))
-    assert results.count(200) == 10 and results.count(429) == 10
+    assert results.count(200) == 5 and results.count(429) == 15
     keys = [key async for key in redis.scan_iter(match=prefix + "*")]
     assert all("student" not in key and "198.51" not in key for key in keys)
     assert all([0 < await redis.ttl(key) <= 900 for key in keys])
@@ -88,11 +92,28 @@ async def test_real_login_unknown_and_known_accounts_have_same_budget(private_li
     create_user(session)
     for email in (STUDENT["email"], "unknown@spu.ac.za"):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            for _ in range(10):
+            for _ in range(5):
                 response = await client.post("/api/v1/auth/login", json={"email": email, "password": "wrong"})
                 assert response.status_code == 401
             response = await client.post("/api/v1/auth/login", json={"email": email, "password": "wrong"})
             assert response.status_code == 429 and response.headers.get("retry-after")
+
+
+@pytest.mark.asyncio
+async def test_success_clears_account_failures_but_preserves_ip_budget(private_limits):
+    redis, prefix, (app, session, _) = private_limits
+    create_user(session)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        for _ in range(4):
+            assert (await client.post("/api/v1/auth/login", json={**STUDENT, "password": "wrong"})).status_code == 401
+        assert (await client.post("/api/v1/auth/login", json=STUDENT)).status_code == 200
+        account_key = prefix + "auth-limit:login:account:" + limiter.identity_digest(STUDENT["email"])
+        assert await redis.get(account_key) is None
+        ip_key = prefix + "auth-limit:login:ip:" + limiter.identity_digest("127.0.0.1")
+        assert int(await redis.get(ip_key)) == 5
+        for _ in range(5):
+            assert (await client.post("/api/v1/auth/login", json={**STUDENT, "password": "wrong"})).status_code == 401
+        assert (await client.post("/api/v1/auth/login", json=STUDENT)).status_code == 429
 
 
 @pytest.mark.asyncio

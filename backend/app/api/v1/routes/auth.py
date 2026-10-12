@@ -14,7 +14,7 @@ from app.schemas.auth import LoginRequest, RefreshRequest, StudentCreate, Landlo
 from app.core.config import settings
 from app.schemas.auth import AuthEmailRequest, EmailTokenRequest, ResetPasswordRequest
 from app.services.auth_email_service import issue_email_token, consume_email_token, now
-from app.services.auth_rate_limit import enforce_auth_limit
+from app.services.auth_rate_limit import enforce_auth_limit, reset_login_failures
 import logging
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ async def login(credentials: LoginRequest, request: Request, db: AsyncSession = 
         )
 
     ensure_account_access(user)
+    await reset_login_failures(credentials.email)
     # 3. Issue tokens
     access_token = create_access_token(subject=user.id, token_version=user.token_version)
     refresh_token = create_refresh_token(subject=user.id, token_version=user.token_version)

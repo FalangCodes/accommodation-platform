@@ -4,13 +4,16 @@ No database schema changes. Existing enquiry limits remain unchanged.
 
 | Budget | Window | Per IP | Per address |
 |---|---|---|---|
-| Sign-in attempts | 15 minutes | 60 | 10 |
+| Sign-in attempts | 15 minutes | 60 total attempts | 5 failed sign-ins |
 | Registration, shared across student/landlord/moderator | 1 hour | 10 | 3 |
 | Verification/resets email requests, combined | 1 hour | 30 | 5 |
 | Verification/password-reset token submissions, combined | 15 minutes | 30 | — |
 | Refresh requests | 1 minute | 180 | — |
 
-Budgets count successful and unsuccessful attempts, including unknown accounts.
+Account sign-in limits count failed sign-ins, including unknown accounts. Each
+request reserves a slot before credential checking so concurrent attempts cannot
+bypass the cap. A successful sign-in clears the account counter, while the IP
+counter remains. Other budgets count successful and unsuccessful attempts.
 Redis Lua checks and increments all budgets atomically. Normalised addresses and
 IPs are represented by keyed hashes; passwords, tokens and raw addresses are not
 stored in limiter keys. Limits expire automatically. Blocked requests return 429
@@ -44,8 +47,9 @@ and capture mail without contacting SMTP.
 ## User checks
 
 Using a test account, repeat an incorrect password until the sign-in budget is
-exhausted. The next attempt shows a wait message. A correct password during that
-window is also throttled; it works after the window expires. Email pages show a
+exhausted after five failures. The sixth attempt shows a wait message. A correct password during that
+window is also throttled; it works after the window expires. Successful sign-in
+before exhausting the budget resets the account failure count. Email pages show a
 wait message when their combined request budget is exhausted. Temporary refresh
 throttling/outages preserve browser tokens and permit a later retry.
 

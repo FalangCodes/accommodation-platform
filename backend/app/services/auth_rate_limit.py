@@ -10,10 +10,10 @@ from app.services.cache_service import get_redis
 
 logger = logging.getLogger(__name__)
 
-# All attempts count, including unknown addresses and successful requests.
-# This avoids exposing account existence through rate-limit responses.
+# Every attempt reserves a slot before checking credentials. Successful sign-in
+# clears the account budget; IP budgets always count every attempt.
 POLICIES = {
-    "login": (900, 60, 10),
+    "login": (900, 60, 5),
     "registration": (3600, 10, 3),
     "email": (3600, 30, 5),
     "token": (900, 30, None),
@@ -84,3 +84,16 @@ async def enforce_auth_limit(request: Request, policy: str, email: str | None = 
         raise HTTPException(status_code=429,
                             detail=f"Too many attempts. Please try again in {minutes} minute(s).",
                             headers={"Retry-After": str(retry)})
+
+
+async def reset_login_failures(email: str):
+    """A successful sign-in starts a fresh account budget, but keeps IP usage."""
+    key = f"auth-limit:login:account:{identity_digest(str(email).strip().lower())}"
+    try:
+        redis = await get_redis()
+        await redis.delete(key)
+    except Exception:
+        logger.error("Authentication failure counter could not be reset")
+        raise HTTPException(status_code=503,
+                            detail="Authentication is temporarily unavailable. Please try again shortly.",
+                            headers={"Retry-After": "60"}) from None
