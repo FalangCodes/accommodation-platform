@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { api, accommodationsApi } from "@/lib/api";
 import PageLayout from "@/components/page-layout";
+import { LandlordReports } from "@/components/management-report";
 import ImageUploader from "@/components/image-uploader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -569,6 +570,7 @@ function CreateListingModal({
 // ─── Analytics Panel ──────────────────────────────────────────────────────────
 
 function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => void }) {
+  const [showReports, setShowReports] = useState(false);
   const { data: analytics, isLoading } = useQuery({
     queryKey: ["analytics", listing.id],
     queryFn: () => fetchAnalytics(listing.id),
@@ -578,6 +580,11 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
   queryKey: ["listing-insights", listing.id],
   queryFn: () => api.get(`/api/v1/accommodations/${listing.id}/insights`).then(r => r.data),
 });
+
+  if (showReports) return <div className="space-y-4">
+    <button onClick={() => setShowReports(false)} className="text-sm text-slate-500 hover:text-slate-800">Back to property insights</button>
+    <LandlordReports accommodationId={listing.id} />
+  </div>;
 
   return (
     <div className="space-y-6">
@@ -595,6 +602,8 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
           <MapPin className="w-3.5 h-3.5" />{listing.address}
         </p>
       </div>
+
+      <Button variant="outline" onClick={() => setShowReports(true)} className="rounded-xl">Generate / view management reports</Button>
 
       {isLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

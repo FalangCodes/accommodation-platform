@@ -238,6 +238,7 @@ export const reportsApi = {
   list: (params?: { report_type?: string; entity_id?: number }) =>
     api.get("/api/v1/reports", { params }),
   get: (id: number) => api.get(`/api/v1/reports/${id}`),
+  download: (id: number) => api.get(`/api/v1/reports/${id}/pdf`, { responseType: "blob" }),
   getAccommodationTrend: (accommodationId: number) =>
     api.get(`/api/v1/reports/accommodation/${accommodationId}/trend`),
 };

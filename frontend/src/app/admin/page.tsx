@@ -6,8 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi, reportsApi, moderationApi } from "@/lib/api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { FileText, Download, RefreshCw, Calendar } from "lucide-react";
+import { FileText, RefreshCw, Calendar } from "lucide-react";
 import PageLayout from "@/components/page-layout";
+import { ManagementReport, ReportDownloadButton, type ManagementDocument } from "@/components/management-report";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -112,6 +113,7 @@ interface Report {
 }
 
 interface ReportDetail {
+  document?: ManagementDocument | null;
   id: number;
   report_type: string;
   period_year: number;
@@ -878,7 +880,7 @@ function ReportDetailView({ reportId, onBack }: { reportId: number; onBack: () =
    const { data: trendData = [] } = useQuery({
   queryKey: ["accommodation-trend", report?.entity_id],
   queryFn: () => reportsApi.getAccommodationTrend(report!.entity_id!).then(r => r.data),
-  enabled: !!report && report.report_type === "accommodation" && !!report.entity_id,
+  enabled: !!report && !report.document && report.report_type === "accommodation" && !!report.entity_id,
 });
 
   if (isLoading) return (
@@ -892,61 +894,19 @@ function ReportDetailView({ reportId, onBack }: { reportId: number; onBack: () =
 
   if (!report) return null;
 
+  if (report.document) return <div className="space-y-4">
+    <button onClick={onBack} className="text-sm text-slate-500 hover:text-slate-800">Back to reports</button>
+    <ManagementReport reportId={reportId} report={report.document} />
+  </div>;
+
   const periodLabel = `${MONTH_NAMES[report.period_month - 1]} ${report.period_year}`;
 
 
 
   return (
     <>
-      {/* Print styles injected inline */}
-      <style>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 20mm 15mm;
-          }
-          body * { visibility: hidden !important; }
-          #report-print-area, #report-print-area * { visibility: visible !important; }
-          #report-print-area {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 0;
-          }
-          .no-print { display: none !important; }
-          #report-print-area .bg-white {
-            border: 1px solid #e2e8f0 !important;
-            border-radius: 8px !important;
-            margin-bottom: 16px !important;
-            page-break-inside: avoid;
-          }
-          #report-print-area h2 {
-            font-size: 18px !important;
-            font-weight: 700 !important;
-            color: #0f172a !important;
-          }
-          #report-print-area h3 {
-            font-size: 13px !important;
-            font-weight: 600 !important;
-            color: #0f172a !important;
-            margin-bottom: 8px !important;
-          }
-          #report-print-area p, #report-print-area span {
-            color: #334155 !important;
-          }
-          #report-print-area .grid {
-            display: grid !important;
-          }
-          #report-print-area .text-xl {
-            font-size: 20px !important;
-            font-weight: 700 !important;
-          }
-        }
-      `}</style>
-
       <div className="space-y-6">
-        {/* Toolbar — hidden on print */}
+        {/* Saved report toolbar */}
         <div className="flex items-center justify-between no-print">
           <button
             onClick={onBack}
@@ -954,17 +914,11 @@ function ReportDetailView({ reportId, onBack }: { reportId: number; onBack: () =
           >
             <ChevronRight className="w-4 h-4 rotate-180" /> Back to reports
           </button>
-          <Button
-            size="sm"
-            className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2"
-            onClick={() => window.print()}
-          >
-            <Download className="w-4 h-4" /> Print / Export PDF
-          </Button>
+          <ReportDownloadButton reportId={reportId} />
         </div>
 
-        {/* Report content — this is what prints */}
-        <div id="report-print-area" className="space-y-8">
+        {/* Legacy report content */}
+        <div className="space-y-8">
           {/* Header */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6">
             <div className="flex items-start justify-between gap-4">

@@ -78,3 +78,5 @@ psycopg2-binary
 azure-storage-blob==12.19.0
 apscheduler==3.10.4
 google-genai>=0.8.0  # Gemini Flash NLP engine
+reportlab==4.4.9
+pypdf==6.10.0
