@@ -88,7 +88,7 @@ only on Azure.
 
 ## Local frontend checks
 
-TypeScript checks and the new report component lint passed. Existing admin,
-dashboard and API lint issues remain outside this change. The local production
-build could not download Google Fonts (DNS failures for fonts.gstatic.com);
-confirm the Vercel production build before browser acceptance.
+TypeScript checks, the new report component lint and the final production
+frontend build passed on 13 October 2026. Existing admin, dashboard and API lint
+issues remain outside this change. Confirm the matching Vercel deployment before
+browser acceptance.
