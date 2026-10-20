@@ -86,6 +86,20 @@ integration test also verifies the persisted validation step survives export.
 
 ### Deployment procedure
 
+Report wording refinement (21 October 2026): new snapshots recommend only the
+missing photos/gender/funding fields, identify low-rated feedback as unanswered
+rather than unresolved, and keep topic evidence concise. Priority explanations
+appear with the relevant action; interpretation limits remain in methodology.
+Property reports omit the platform-only student-account interpretation note.
+Optional saved priority labels make Validate/Maintain readable without changing
+the underlying triage categories. Older documents use the previous display-label
+fallback; their stored findings and metrics are never rewritten.
+
+Four additional Azure integration scenarios cover properties with existing
+photos, missing photos, missing profile fields, and complete profiles, including
+the resulting PDF advice. Frontend changes are limited to report wording and
+labels. Local PDF previews use synthetic data and are not backend runtime tests.
+
 1. Pull the pushed commit, preserving the VM Compose configuration as usual.
 2. Build the backend image (new pinned PDF dependencies); do not restart yet:
    `docker compose build backend`

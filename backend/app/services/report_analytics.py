@@ -13,6 +13,8 @@ from app.models.university import University
 from app.models.moderation import ModerationLog, Appeal
 
 PUBLISHED = ("analysed", "released")
+PRIORITY_LABELS = {"High": "High priority", "Medium": "Medium priority",
+                   "Validate": "Validate feedback", "Maintain": "Maintain current strengths"}
 TOPICS = {
     "Safety": ("safe", "secur", "crime", "safety"),
     "WiFi & Internet": ("wifi", "internet", "connection"),
@@ -79,6 +81,19 @@ def topic_priority(negative, classified):
     return "Maintain", "No negative overall sentiment is recorded among these topic-tagged reviews; this does not establish that the topic is problem-free."
 
 
+def counted(count, noun):
+    return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
+def profile_guidance(photo_count, missing_fields):
+    steps = []
+    if not photo_count:
+        steps.append("Add representative property photos.")
+    if missing_fields:
+        steps.append("Complete " + " and ".join(missing_fields) + " using the dashboard or platform support.")
+    return " ".join(steps) + " Keep the listing accurate, then monitor visibility over the next comparable period."
+
+
 def build_topics(reviews):
     """Sentiment belongs to the review, not to a separately scored topic."""
     buckets = defaultdict(Counter)
@@ -103,12 +118,16 @@ def build_topics(reviews):
                       "Review the original feedback and confirm whether dissatisfaction relates to this topic. ") + "If confirmed, " + action[0].lower() + action[1:]
             measure = "Record the concern, whether it relates to this topic and the outcome of the initial check. " + measure
         share = f"{negatives / classified:.1%}" if classified else "not available"
-        evidence = (f"{mentions} reviews are AI-tagged with this topic; {negatives} of those reviews have negative overall sentiment. "
-                    f"Negative share: {share} of {classified} recognised sentiment results; {counts['unclassified']} unclassified results excluded. {reason}")
+        evidence = (f"{counted(mentions, 'review')} tagged with this topic. "
+                    f"Negative overall sentiment: {negatives} ({share} of {classified} classified)." if classified else
+                    f"{counted(mentions, 'review')} tagged with this topic; no recognised sentiment results.")
+        if counts["unclassified"]:
+            evidence += f" {counted(counts['unclassified'], 'unclassified result')} excluded from the percentage."
         output.append({"name": name, "mentions": mentions, "positive": counts["positive"],
                        "neutral": counts["neutral"], "negative": negatives,
                        "unclassified": counts["unclassified"], "priority": priority,
-                       "evidence": evidence,
+                       "priority_label": PRIORITY_LABELS[priority],
+                       "evidence": evidence, "priority_reason": reason,
                        "action": action, "success_measure": measure})
     return sorted(output, key=lambda item: ({"High": 0, "Medium": 1, "Validate": 2, "Maintain": 3}[item["priority"]],
         not (item["name"] == "Safety" and item["negative"]), -item["negative"], -item["mentions"], item["name"]))
@@ -188,7 +207,7 @@ def compose_document(data, report_type, year, month, generated_at, title):
         history.append({"month_label": cursor.strftime("%b %Y"), "month": cursor.strftime("%Y-%m"), "views": monthly[cursor], "cumulative": running})
         cursor = next_month(cursor)
     topics = build_topics(reviews)
-    actions = [{"priority": row["priority"], "title": row["name"], "evidence": row["evidence"],
+    actions = [{"priority": row["priority"], "title": row["name"], "evidence": row["evidence"] + " " + row["priority_reason"],
                 "action": row["action"], "owner": "Property manager" if report_type == "accommodation" else "Admin / landlord liaison",
                 "success_measure": row["success_measure"]} for row in topics if row["negative"]][:5]
     strengths = []
@@ -196,9 +215,10 @@ def compose_document(data, report_type, year, month, generated_at, title):
         classified_topic = row["mentions"] - row["unclassified"]
         strong_positive = row["positive"] >= 5 and row["positive"] / classified_topic >= .7
         if (row["positive"] >= 2 and not row["negative"]) or strong_positive:
-            strengths.append(f"Preserve the practices associated with {row['name'].lower()}: {row['positive']} of {classified_topic} topic-tagged reviews with recognised sentiment are positive overall. "
-                             f"Negative overall results: {row['negative']}. Confirm what residents value while checking the concerns; overall sentiment is not a separate topic score.")
-    summary = [f"{views} recorded page views and {len(current)} currently published reviews submitted during the reporting period."]
+            strengths.append(f"{row['name']}: positive overall sentiment in {row['positive']} of {classified_topic} classified, topic-tagged reviews. "
+                             + (f"Also check the {counted(row['negative'], 'negative result')}. " if row["negative"] else "")
+                             + "Confirm which practices residents value and preserve them.")
+    summary = [f"Recorded activity: {counted(views, 'page view')}; {counted(len(current), 'published review')} submitted during the reporting period."]
     if views and prior_views:
         change = comparison(views, prior_views, comparison_label)["percent"]
         summary.append(f"Recorded visibility changed from {prior_views} to {views} page views ({change:+g}%) against the comparison period. This measures attention, not applications or bookings.")
@@ -208,19 +228,20 @@ def compose_document(data, report_type, year, month, generated_at, title):
         summary.append("The comparison period has no recorded views; a percentage growth claim would be misleading.")
     elif not views:
         summary.append("No page views are recorded for this period. Check listing visibility and whether buffered views have reached the database before concluding that demand is absent.")
-    summary.append(f"The evidence base is {len(reviews)} published reviews; {classified} have a recognised sentiment result.")
+    summary.append(f"Feedback evidence: {counted(len(reviews), 'published review')}; {counted(classified, 'recognised sentiment result')}.")
     if topics and actions:
-        summary.append(f"Feedback-specific attention: {actions[0]['title'].lower()}. {actions[0]['evidence']} Investigate the underlying issue before committing expenditure.")
+        summary.append(f"Feedback to check: {actions[0]['title'].lower()}. See the evidence and next step in the action plan.")
     if len(reviews) < 10:
         summary.append("The review sample is small. Treat the findings as directional feedback rather than a representative satisfaction survey.")
     if not actions:
         maintain = bool(topics and sentiments["positive"] >= 2 and sentiments["positive"] >= .6 * classified)
-        actions.append({"priority": "Maintain" if maintain else "Validate", "title": "Preserve service strengths and monitor feedback" if maintain else "Clarify mixed or neutral feedback" if topics else "Check feedback analysis coverage" if reviews else "Build the feedback evidence base", "evidence": f"{len(reviews)} published reviews; no supported negative-topic priority is available.",
+        actions.append({"priority": "Maintain" if maintain else "Validate", "title": "Preserve service strengths and monitor feedback" if maintain else "Clarify mixed or neutral feedback" if topics else "Check feedback analysis coverage" if reviews else "Build the feedback evidence base", "evidence": f"{counted(len(reviews), 'published review')}; no supported negative-topic priority is available.",
                         "action": "Continue the practices highlighted by positive feedback and monitor new concerns without treating a lack of negative tags as proof that every issue is resolved." if maintain else "Ask residents what is working and what could improve, and review the context of neutral feedback before deciding on expenditure." if topics else "Check topic-analysis coverage and ask residents about specific experiences before making topic-specific decisions." if reviews else "Invite residents to leave honest reviews without incentives tied to positive ratings. Ask about specific experiences through the normal support channel.",
                         "owner": "Property manager" if report_type == "accommodation" else "Platform operations", "success_measure": "Track new published reviews and whether previously unassessed topics receive feedback."})
     unanswered = [r for r in reviews if r["id"] not in data["replied"]]
     if any(r["rating"] <= 2 for r in unanswered):
-        actions.append({"priority": "Medium", "title": "Respond to unresolved public feedback", "evidence": f"{sum(r['rating'] <= 2 for r in unanswered)} low-rated published reviews have no public landlord reply through the cutoff.",
+        unanswered_count = sum(r['rating'] <= 2 for r in unanswered)
+        actions.append({"priority": "Medium", "title": "Respond to unanswered public feedback", "evidence": f"{counted(unanswered_count, 'low-rated published review')} {'has' if unanswered_count == 1 else 'have'} no public landlord reply through the cutoff.",
                         "action": "Acknowledge the concerns publicly without identifying residents and explain the next step or resolution.",
                         "owner": "Property manager" if report_type == "accommodation" else "Landlord liaison", "success_measure": "Track reply coverage on low-rated reviews; a reply alone does not prove an issue is resolved."})
     quality = ["Reporting month boundaries and comparison cutoffs use UTC.",
@@ -228,16 +249,17 @@ def compose_document(data, report_type, year, month, generated_at, title):
                "View timestamps reflect when buffered counts were flushed to the database. Unflushed views are excluded; daily activity and precise visit times cannot be reconstructed.",
                "Published-review metrics exclude deleted, pending and quarantined reviews using their review status at generation. Historical snapshots are not reconstructed from today's listing/account status.",
                "Available feedback from scoped off-market properties can still be included. Review figures do not imply that the listing is currently visible; current listing statuses are shown separately.",
-               "Topic counts use the latest stored AI tags (score >= 0.4) and whole-review sentiment at generation. They are not independent topic sentiment scores or verified safety assessments.",
-               "Action priorities guide investigation. Negative overall sentiment does not establish which of the tagged topics caused dissatisfaction.",
-               "Topic investigation policy: High requires at least 10 recognised sentiment results, at least 5 negative and at least 40% negative; Medium requires at least 5 recognised results, at least 2 negative and at least 20% negative. Other negative signals require validation. These are triage rules, not statistical confidence or verified severity. Unclassified results are excluded from the share denominator. Safety signals still require a prompt manual check, regardless of priority.",
-               "Verified student counts refer to active student-role accounts with verified institutional emails, not confirmed current enrolment or housing demand.",
+               "Topics use stored AI tags (score >= 0.4) and whole-review sentiment. A positive or negative review can mention several topics; its sentiment does not establish which topic caused satisfaction or concern, or confirm a safety hazard.",
                "Percentages use reviews with recognised sentiment results as their denominator; sample sizes are shown. No individual student names, emails or verification documents are included."]
+    if topics:
+        quality.append("Topic triage rules: High requires 10+ classified results, 5+ negative and 40%+ negative; Medium requires 5+ classified, 2+ negative and 20%+ negative. Other negative signals need validation. These are investigation thresholds, not statistical confidence or confirmed severity. Unclassified results are excluded. Safety signals need a prompt manual check at any priority.")
+    if report_type == "platform_summary":
+        quality.append("Verified student counts refer to active student-role accounts with verified institutional emails, not confirmed current enrolment or housing demand.")
     if partial:
         quality.append("This is a month-to-date report, not a complete month. Comparisons use the same elapsed duration in the preceding month, capped at its month end.")
     missing = sum(not row["gender_policy"] or not row["funding_type"] for row in listings)
     if missing:
-        quality.append(f"{missing} scoped listings have an unspecified gender policy or funding type; complete these fields to improve discovery filters.")
+        quality.append(f"{counted(missing, 'scoped listing')} {'has' if missing == 1 else 'have'} an unspecified gender policy or funding type; complete these fields to improve discovery filters.")
     rows = []
     for listing in listings:
         feedback = [r for r in reviews if r["accommodation_id"] == listing["id"]]
@@ -300,8 +322,8 @@ async def build_report_document(db, report_type, year, month, entity_id=None, ge
         if missing:
             document["actions"].append({"priority": "Medium", "title": "Complete discovery and presentation details",
                 "evidence": "Missing current details: " + ", ".join(missing) + ". These are gaps in the listing record, not a proven cause of low traffic.",
-                "action": "Add representative property photos and check advertised profile fields using the dashboard or platform support. Keep the information accurate rather than overstating facilities.",
-                "owner": "Landlord / platform support", "success_measure": "Confirm that photos and discovery fields are complete, then monitor recorded visibility in the next comparable period."})
+                "action": profile_guidance(photo_count, [field for field in missing if field != "listing photos"]),
+                "owner": "Landlord / platform support", "success_measure": "Confirm completion of: " + ", ".join(missing) + ". Monitor recorded visibility in the next comparable period."})
         view_metric = next(row for row in document["kpis"] if row["key"] == "monthly_views")
         prior_views = view_metric["comparison"]["previous"]
         if prior_views >= 20 and values["monthly_views"] < prior_views * .75:
@@ -330,7 +352,7 @@ async def build_report_document(db, report_type, year, month, entity_id=None, ge
                                    {"label": "Current approved listings with unverified owners", "value": unverified_published}]
         if inactive_published or unverified_published:
             document["actions"].insert(0, {"priority": "High", "title": "Resolve publication and ownership readiness gaps",
-                "evidence": f"{inactive_published} approved listings have inactive owner accounts; {unverified_published} have owners whose verification is not complete. These groups may overlap.",
+                "evidence": f"Approved listings with inactive owners: {inactive_published}; with unverified owners: {unverified_published}. These groups may overlap.",
                 "action": "Review the affected listings before promoting them. Inactive owners cannot receive enquiries through the platform; check contact availability and verification requirements and make an explicit publication decision.",
                 "owner": "Administrator / verification lead", "success_measure": "Confirm that publicly promoted listings have active owners, completed verification and a working enquiry path."})
         if report_type == "platform_summary":
@@ -372,20 +394,22 @@ async def build_report_document(db, report_type, year, month, entity_id=None, ge
             uncovered = [row for row in document["campus_coverage"] if row["verified_students"] and not row["approved_listings"]]
             if uncovered:
                 document["actions"].append({"priority": "Medium", "title": "Investigate gaps in campus discovery coverage",
-                    "evidence": f"{len(uncovered)} universities have active verified student accounts but no approved linked listings.",
+                    "evidence": f"Universities with verified student accounts but no approved linked listings: {len(uncovered)}.",
                     "action": "Check listing-campus links and identify relevant landlords to onboard after normal verification.",
                     "owner": "Platform operations", "success_measure": "Track approved linked listings per campus; student accounts are not a measure of housing demand or available beds."})
             if unverified_landlords:
                 document["actions"].append({"priority": "Medium", "title": "Help landlords complete publication requirements",
-                    "evidence": f"{unverified_landlords} landlord profiles currently remain unverified.",
+                    "evidence": f"{counted(unverified_landlords, 'landlord profile')} {'remains' if unverified_landlords == 1 else 'remain'} unverified.",
                     "action": "Review the verification instructions and identify incomplete onboarding steps. Make the evidence requirements clear before expecting listings to become public.",
                     "owner": "Landlord onboarding / administrator", "success_measure": "Track movement from unverified to pending and verified profiles without bypassing document checks."})
         if pending:
             document["actions"].insert(0, {"priority": "Medium", "title": "Unblock listing publication",
-                "evidence": f"{len(pending)} current pending listings; {older} were created at least seven days ago (creation age is not time spent in the queue).",
+                "evidence": f"Current pending listings: {len(pending)}. Created at least seven days ago: {older} (creation age is not time spent in the queue).",
                 "action": "Check ownership evidence and outstanding landlord responses. Review older cases and make clear publication decisions.",
                 "owner": "Administrator / moderation lead", "success_measure": "Track pending listings and completed decisions; verify that publication requirements remain satisfied."})
     document["actions"].sort(key=lambda action: {"High": 0, "Medium": 1, "Validate": 2, "Maintain": 3}.get(action["priority"], 4))
     document["actions"] = document["actions"][:8]
+    for action in document["actions"]:
+        action["priority_label"] = PRIORITY_LABELS.get(action["priority"], action["priority"])
     document["summary"].append("Management priorities: " + "; ".join(action["title"] for action in document["actions"][:3]) + ". The action plan identifies responsibility and a follow-up measure for each.")
     return document

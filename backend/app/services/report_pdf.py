@@ -64,7 +64,7 @@ def rating_chart(ratings):
     for index, stars in enumerate(range(5, 0, -1)):
         y = 74 - index * 16
         count = ratings.get(str(stars), 0)
-        drawing.add(String(0, y, f"{stars} stars", fontSize=9, fillColor=GREY))
+        drawing.add(String(0, y, f"{stars} {'star' if stars == 1 else 'stars'}", fontSize=9, fillColor=GREY))
         drawing.add(Rect(48, y-1, WIDTH-80, 9, fillColor=PALE, strokeColor=None))
         drawing.add(Rect(48, y-1, (WIDTH-80)*count/maximum, 9, fillColor=TEAL, strokeColor=None))
         drawing.add(String(WIDTH-12, y, str(count), textAnchor="end", fontSize=9, fillColor=NAVY))
@@ -134,11 +134,11 @@ def render_report_pdf(document, report_id=None):
         rows = [[name.title(), count, f"{count / total * 100:.0f}%" if total else "Not available"] for name, count in sentiments["counts"].items()]
         table(["Overall review sentiment", "Reviews", "Share of classified reviews"], rows, [WIDTH*.49, WIDTH*.18, WIDTH*.33])
         story.append(Spacer(1, 7))
-        story.append(para(f"Recognised sentiment: {total} of {sentiments['published']} published reviews. Rating distribution: " + "; ".join(f"{stars} stars: {count}" for stars, count in document["ratings"].items()), "small"))
+        story.append(para(f"Published reviews: {sentiments['published']}; recognised sentiment results: {total}. Rating distribution: " + "; ".join(f"{stars} {'star' if str(stars) == '1' else 'stars'}: {count}" for stars, count in document["ratings"].items()), "small"))
         story.append(rating_chart(document["ratings"]))
         coverage = document.get("reply_coverage")
         if coverage:
-            story.append(para(f"Public landlord reply coverage: {coverage['replied']} of {coverage['published']} published reviews. Replies indicate engagement, not confirmed resolution.", "small"))
+            story.append(para(f"Public landlord replies to published reviews: {coverage['replied']} of {coverage['published']}. Replies indicate engagement, not confirmed resolution.", "small"))
     if document["topics"]:
         section("Topics behind the feedback")
         introduction = para("Counts describe whole-review sentiment among reviews tagged with each topic, not an independent topic score. Other = neutral or unclassified sentiment.", "small")
@@ -150,7 +150,8 @@ def render_report_pdf(document, report_id=None):
     if document["actions"]:
         section("Prioritised action plan")
         for index, action in enumerate(document["actions"], 1):
-            story.append(KeepTogether([para(f"{index}. {action['title']} | {action['priority']} priority", "h2"),
+            label = action.get("priority_label", action["priority"] + " priority")
+            story.append(KeepTogether([para(f"{index}. {action['title']} | {label}", "h2"),
                 para("Evidence: " + action["evidence"]), para("Next step: " + action["action"]),
                 para("Responsible: " + action["owner"] + " | Follow-up measure: " + action["success_measure"], "small")]))
     if document["strengths"]:

@@ -39,10 +39,10 @@ def test_topic_priorities_balance_frequency_proportion_and_sample(counts, expect
 def test_unclassified_results_are_disclosed_and_do_not_dilute_known_sentiment():
     topic = build_topics(feedback(positive=5, negative=5, unclassified=100))[0]
     assert topic["priority"] == "High"
-    assert "50.0% of 10 recognised sentiment results" in topic["evidence"]
+    assert "50.0% of 10 classified" in topic["evidence"]
     assert "100 unclassified results excluded" in topic["evidence"]
     unknown = build_topics(feedback(unclassified=10))[0]
-    assert "Negative share: not available" in unknown["evidence"]
+    assert "no recognised sentiment results" in unknown["evidence"]
 
 
 @pytest.mark.parametrize("scope", ["accommodation", "platform_summary", "university"])
@@ -58,8 +58,8 @@ def test_isolated_safety_signal_stays_visible_alongside_dominant_strength(scope)
     assert action["priority"] == "Validate"
     assert "Promptly review the original feedback" in action["action"]
     assert "If confirmed, inspect" in action["action"]
-    assert "1.8% of 56 recognised" in action["evidence"]
-    assert any("45 of 56" in strength and "Negative overall results: 1" in strength for strength in document["strengths"])
+    assert "1.8% of 56 classified" in action["evidence"]
+    assert any("45 of 56" in strength and "1 negative result" in strength for strength in document["strengths"])
     assert any("Safety" == row["title"] for row in document["actions"])
     assert any("triage rules" in note for note in document["data_quality"])
 

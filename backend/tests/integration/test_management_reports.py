@@ -14,7 +14,7 @@ from app.core.security import create_access_token
 from app.models.user import User
 from app.models.student import Student
 from app.models.landlord import Landlord
-from app.models.accommodation import Accommodation, AccommodationView, accommodation_universities
+from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage, accommodation_universities
 from app.models.review import Review, ReviewNLPResult, ReviewReply
 from app.models.report import MonthlyReport, ReportMetric
 from app.models.moderation import Appeal
@@ -124,8 +124,45 @@ async def test_owner_generate_list_read_pdf_and_snapshot_stability(report_app):
     pages = [page.extract_text() for page in reader.pages]
     assert all("AccomFind" in page and f"Page {i+1}" in page for i,page in enumerate(pages))
     assert "Executive assessment" in "\n".join(pages) and "Prioritised action plan" in "\n".join(pages)
-    assert "Validate priority" in "\n".join(pages)
+    assert "Validate feedback" in "\n".join(pages)
     assert "Promptly review the original feedback" in "\n".join(pages)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("photos, gender, funding, expected", [
+    (5, None, None, ["gender policy", "funding type"]),
+    (0, "female", "self_funded", ["listing photos"]),
+    (0, None, None, ["listing photos", "gender policy", "funding type"]),
+    (5, "female", "self_funded", []),
+])
+async def test_profile_advice_matches_actual_gaps_and_pdf(report_app, photos, gender, funding, expected):
+    client, sessions = report_app
+    async with sessions() as db:
+        listing = await db.get(Accommodation, 1)
+        listing.gender_policy, listing.funding_type = gender, funding
+        db.add_all([AccommodationImage(accommodation_id=1, blob_url=f"https://example.test/{i}.jpg") for i in range(photos)])
+        await db.commit()
+    generated = await client.post("/api/v1/reports/generate", headers=headers(3), json={
+        "report_type": "accommodation", "entity_id": 1, "year": 2026, "month": 9})
+    assert generated.status_code == 201, generated.text
+    identifier = generated.json()["report_id"]
+    document = (await client.get(f"/api/v1/reports/{identifier}", headers=headers(3))).json()["document"]
+    profile_actions = [row for row in document["actions"] if row["title"] == "Complete discovery and presentation details"]
+    assert bool(profile_actions) == bool(expected)
+    if expected:
+        action = profile_actions[0]
+        assert all(field in action["evidence"] and field in action["success_measure"] for field in expected)
+        assert ("Add representative property photos" in action["action"]) == (photos == 0)
+        assert ("gender policy" in action["action"]) == (gender is None)
+        assert ("funding type" in action["action"]) == (funding is None)
+    reply_action = next(row for row in document["actions"] if row["title"] == "Respond to unanswered public feedback")
+    assert "1 low-rated published review has no public landlord reply" in reply_action["evidence"]
+    assert not any("institutional emails" in note for note in document["data_quality"])
+    pdf = await client.get(f"/api/v1/reports/{identifier}/pdf", headers=headers(3))
+    assert pdf.status_code == 200
+    extracted = " ".join(" ".join(page.extract_text().split()) for page in PdfReader(BytesIO(pdf.content)).pages)
+    assert "Respond to unanswered public feedback" in extracted
+    assert ("Add representative property photos" in extracted) == (photos == 0)
 
 
 @pytest.mark.asyncio
