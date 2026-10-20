@@ -60,6 +60,32 @@ only on Azure.
 
 ## Azure validation and deployment
 
+### Topic priority calibration (21 October 2026)
+
+Newly generated reports use negative-review frequency, its share of recognised
+sentiment results within each topic, and minimum sample sizes. High investigation
+priority requires at least 10 recognised results, 5 negative results and 40%
+negative; Medium requires at least 5 recognised results, 2 negative results and
+20% negative. Other negative signals remain visible as Validate. These thresholds
+are an operational triage policy, not statistical significance or confirmed risk.
+Unclassified sentiment is explicitly excluded from the percentage denominator.
+
+An isolated safety signal prompts manual review and confirmation before
+topic-specific expenditure. A topic name alone does not make it High priority.
+Strong positive feedback (at least 5 positive results and 70% of recognised
+topic-tagged sentiment) can remain a strength alongside concerns. All counts
+remain whole-review sentiment, not an independent score for a tagged topic.
+Existing saved reports retain their original classifications and PDF content;
+generate a fresh report to use the new policy. No schema migration is needed.
+
+Azure regression coverage includes `tests/unit/test_report_priorities.py` for
+the observed 45-positive/10-neutral/1-negative safety scenario, sample and share
+boundaries, unclassified results, cross-scope behaviour, mixed strengths, safety
+follow-up and ordering against repeated non-safety concerns. The report API/PDF
+integration test also verifies the persisted validation step survives export.
+
+### Deployment procedure
+
 1. Pull the pushed commit, preserving the VM Compose configuration as usual.
 2. Build the backend image (new pinned PDF dependencies); do not restart yet:
    `docker compose build backend`

@@ -68,6 +68,17 @@ def topic_name(key):
     return next((name for name, words in TOPICS.items() if any(word in lowered for word in words)), None)
 
 
+def topic_priority(negative, classified):
+    """Investigation policy, not statistical significance or a verified risk score."""
+    if classified >= 10 and negative >= 5 and negative / classified >= .4:
+        return "High", "Repeated negative feedback represents a substantial share of the classified sample."
+    if classified >= 5 and negative >= 2 and negative / classified >= .2:
+        return "Medium", "Repeated negative feedback warrants investigation; confirm the context before deciding on changes."
+    if negative:
+        return "Validate", "The negative signal is isolated, infrequent or based on a small sample; check the individual feedback before escalating."
+    return "Maintain", "No negative overall sentiment is recorded among these topic-tagged reviews; this does not establish that the topic is problem-free."
+
+
 def build_topics(reviews):
     """Sentiment belongs to the review, not to a separately scored topic."""
     buckets = defaultdict(Counter)
@@ -83,14 +94,24 @@ def build_topics(reviews):
     for name, counts in buckets.items():
         mentions = sum(counts.values())
         negatives = counts["negative"]
-        priority = "High" if name == "Safety" and negatives and mentions >= 3 else "Medium" if negatives and mentions >= 3 else "Validate" if negatives else "Maintain"
+        classified = mentions - counts["unclassified"]
+        priority, reason = topic_priority(negatives, classified)
         action, measure = ADVICE[name]
+        if priority == "Validate":
+            action = ("Promptly review the original feedback and check whether it describes a specific safety concern. "
+                      "Whole-review sentiment and a safety tag alone do not confirm a hazard. " if name == "Safety" else
+                      "Review the original feedback and confirm whether dissatisfaction relates to this topic. ") + "If confirmed, " + action[0].lower() + action[1:]
+            measure = "Record the concern, whether it relates to this topic and the outcome of the initial check. " + measure
+        share = f"{negatives / classified:.1%}" if classified else "not available"
+        evidence = (f"{mentions} reviews are AI-tagged with this topic; {negatives} of those reviews have negative overall sentiment. "
+                    f"Negative share: {share} of {classified} recognised sentiment results; {counts['unclassified']} unclassified results excluded. {reason}")
         output.append({"name": name, "mentions": mentions, "positive": counts["positive"],
                        "neutral": counts["neutral"], "negative": negatives,
                        "unclassified": counts["unclassified"], "priority": priority,
-                       "evidence": f"{mentions} reviews are AI-tagged with this topic; {negatives} of those reviews have negative overall sentiment.",
+                       "evidence": evidence,
                        "action": action, "success_measure": measure})
-    return sorted(output, key=lambda item: ({"High": 0, "Medium": 1, "Validate": 2, "Maintain": 3}[item["priority"]], -item["mentions"], item["name"]))
+    return sorted(output, key=lambda item: ({"High": 0, "Medium": 1, "Validate": 2, "Maintain": 3}[item["priority"]],
+        not (item["name"] == "Safety" and item["negative"]), -item["negative"], -item["mentions"], item["name"]))
 
 
 async def collect_report_data(db, report_type, entity_id, cutoff):
@@ -170,8 +191,13 @@ def compose_document(data, report_type, year, month, generated_at, title):
     actions = [{"priority": row["priority"], "title": row["name"], "evidence": row["evidence"],
                 "action": row["action"], "owner": "Property manager" if report_type == "accommodation" else "Admin / landlord liaison",
                 "success_measure": row["success_measure"]} for row in topics if row["negative"]][:5]
-    strengths = [f"Preserve the practices associated with {row['name'].lower()}: {row['positive']} positive reviews mention this topic. Confirm which practices residents value."
-                 for row in topics if row["positive"] >= 2 and not row["negative"]]
+    strengths = []
+    for row in topics:
+        classified_topic = row["mentions"] - row["unclassified"]
+        strong_positive = row["positive"] >= 5 and row["positive"] / classified_topic >= .7
+        if (row["positive"] >= 2 and not row["negative"]) or strong_positive:
+            strengths.append(f"Preserve the practices associated with {row['name'].lower()}: {row['positive']} of {classified_topic} topic-tagged reviews with recognised sentiment are positive overall. "
+                             f"Negative overall results: {row['negative']}. Confirm what residents value while checking the concerns; overall sentiment is not a separate topic score.")
     summary = [f"{views} recorded page views and {len(current)} currently published reviews submitted during the reporting period."]
     if views and prior_views:
         change = comparison(views, prior_views, comparison_label)["percent"]
@@ -204,6 +230,7 @@ def compose_document(data, report_type, year, month, generated_at, title):
                "Available feedback from scoped off-market properties can still be included. Review figures do not imply that the listing is currently visible; current listing statuses are shown separately.",
                "Topic counts use the latest stored AI tags (score >= 0.4) and whole-review sentiment at generation. They are not independent topic sentiment scores or verified safety assessments.",
                "Action priorities guide investigation. Negative overall sentiment does not establish which of the tagged topics caused dissatisfaction.",
+               "Topic investigation policy: High requires at least 10 recognised sentiment results, at least 5 negative and at least 40% negative; Medium requires at least 5 recognised results, at least 2 negative and at least 20% negative. Other negative signals require validation. These are triage rules, not statistical confidence or verified severity. Unclassified results are excluded from the share denominator. Safety signals still require a prompt manual check, regardless of priority.",
                "Verified student counts refer to active student-role accounts with verified institutional emails, not confirmed current enrolment or housing demand.",
                "Percentages use reviews with recognised sentiment results as their denominator; sample sizes are shown. No individual student names, emails or verification documents are included."]
     if partial:

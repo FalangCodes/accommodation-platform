@@ -108,6 +108,8 @@ async def test_owner_generate_list_read_pdf_and_snapshot_stability(report_app):
     detail = await client.get(f"/api/v1/reports/{identifier}",headers=headers(3))
     assert detail.status_code == 200 and detail.json()["document"]["version"] == 2
     original = detail.json()["document"]
+    assert all(topic["priority"] == "Validate" for topic in original["topics"])
+    assert any("Promptly review" in action["action"] for action in original["actions"])
     async with sessions() as db:
         review = (await db.execute(select(Review).where(Review.student_id == 1))).scalar_one()
         review.deleted_at = NOW
@@ -122,6 +124,8 @@ async def test_owner_generate_list_read_pdf_and_snapshot_stability(report_app):
     pages = [page.extract_text() for page in reader.pages]
     assert all("AccomFind" in page and f"Page {i+1}" in page for i,page in enumerate(pages))
     assert "Executive assessment" in "\n".join(pages) and "Prioritised action plan" in "\n".join(pages)
+    assert "Validate priority" in "\n".join(pages)
+    assert "Promptly review the original feedback" in "\n".join(pages)
 
 
 @pytest.mark.asyncio
