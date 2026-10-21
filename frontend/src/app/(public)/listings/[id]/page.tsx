@@ -520,7 +520,7 @@ function PhotoGrid({ images }: { images: { url: string }[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-4 grid-rows-2 gap-2 h-[420px] rounded-2xl overflow-hidden">
+      <div className="grid grid-cols-4 grid-rows-2 gap-1 sm:gap-2 h-40 sm:h-[420px] rounded-xl sm:rounded-2xl overflow-hidden">
         <div
           className="col-span-2 row-span-2 relative cursor-pointer group bg-slate-100"
           onClick={() => images.length > 0 && setLightbox(0)}
@@ -574,6 +574,8 @@ export default function ListingDetailPage() {
 
   const [activeTab, setActiveTab] = useState<"details" | "reviews" | "location">("details");
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [expandedAmenitiesFor, setExpandedAmenitiesFor] = useState<string | null>(null);
+  const showAllAmenities = expandedAmenitiesFor === id;
   
   // Moderation state
   const [suspendModalOpen, setSuspendModalOpen] = useState(false);
@@ -697,28 +699,28 @@ export default function ListingDetailPage() {
   return (
     <PageLayout>
       <div className="min-h-screen bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
 
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-sm font-medium mb-6 transition-colors"
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-sm font-medium mb-3 sm:mb-6 transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
             Back to results
           </button>
 
           {listingLoading ? (
-            <div className="space-y-2 mb-6">
+            <div className="space-y-2 mb-3 sm:mb-6">
               <Skeleton className="h-8 w-2/3" />
               <Skeleton className="h-5 w-1/3" />
             </div>
           ) : (
-            <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+            <div className="flex items-start justify-between mb-3 sm:mb-6 flex-wrap gap-2 sm:gap-4">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">{listing!.title}</h1>
-                <div className="flex items-center gap-2 mt-1 text-slate-500 text-sm">
-                  <MapPin className="w-4 h-4" />
-                  <span>{listing!.address}</span>
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{listing!.title}</h1>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-slate-500 text-sm">
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  <span className="break-words min-w-0">{listing!.address}</span>
                   {listing!.average_rating && (
                     <>
                       <span className="text-slate-300">·</span>
@@ -729,8 +731,8 @@ export default function ListingDetailPage() {
                   )}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-slate-900">
+              <div className="w-full sm:w-auto flex sm:block items-baseline gap-2 text-left sm:text-right">
+                <div className="text-xl sm:text-2xl font-bold text-slate-900">
                   R{listing!.price_min.toLocaleString()}
                   {listing!.price_max > listing!.price_min && (
                     <span className="text-lg font-normal text-slate-400"> – R{listing!.price_max.toLocaleString()}</span>
@@ -742,15 +744,15 @@ export default function ListingDetailPage() {
           )}
 
           {listingLoading ? (
-            <Skeleton className="w-full h-[420px] rounded-2xl mb-8" />
+            <Skeleton className="w-full h-40 sm:h-[420px] rounded-xl sm:rounded-2xl mb-4 sm:mb-8" />
           ) : (
-            <div className="mb-8">
+            <div className="mb-4 sm:mb-8">
               <PhotoGrid images={listing!.images} />
             </div>
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
 
               {/* Tab bar */}
               <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
@@ -774,7 +776,7 @@ export default function ListingDetailPage() {
 
               {/* Details tab */}
               {activeTab === "details" && (
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   {listingLoading ? (
                     <div className="space-y-3">
                       <Skeleton className="h-4 w-full" />
@@ -784,9 +786,9 @@ export default function ListingDetailPage() {
                   ) : (
                     <>
                       {/* Property details card */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-6">
-                        <h2 className="font-semibold text-slate-900 mb-4">Property details</h2>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6">
+                        <h2 className="font-semibold text-slate-900 mb-2 sm:mb-4">Property details</h2>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:gap-4 mb-2 sm:mb-4">
                           {listing!.property_type && (
                             <div>
                               <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Type</p>
@@ -834,16 +836,27 @@ export default function ListingDetailPage() {
                         {listing!.amenities && listing!.amenities.length > 0 && (
                           <div>
                             <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Amenities</p>
-                            <div className="flex flex-wrap gap-2">
-                              {listing!.amenities.map((amenity) => (
+                            <div id={`listing-${id}-amenities`} className="flex flex-wrap gap-1.5 sm:gap-2">
+                              {listing!.amenities.map((amenity, index) => (
                                 <span
                                   key={amenity}
-                                  className="text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium capitalize"
+                                  className={`${index >= 4 && !showAllAmenities ? "hidden sm:inline-flex" : "inline-flex"} text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium capitalize`}
                                 >
                                   {amenity.replace("_", " ")}
                                 </span>
                               ))}
                             </div>
+                            {listing!.amenities.length > 4 && (
+                              <button
+                                type="button"
+                                className="sm:hidden min-h-11 text-xs font-semibold text-[#1f4e79] underline underline-offset-2"
+                                aria-expanded={showAllAmenities}
+                                aria-controls={`listing-${id}-amenities`}
+                                onClick={() => setExpandedAmenitiesFor(showAllAmenities ? null : id)}
+                              >
+                                {showAllAmenities ? "Show fewer amenities" : `Show all ${listing!.amenities.length} amenities`}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
