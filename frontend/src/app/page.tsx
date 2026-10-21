@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import ActivityToast from "@/components/activity-toast";
 import Navbar from "@/components/navbar";
 import {
@@ -69,6 +70,7 @@ function StarRow({ rating }: { rating: number }) {
 
 export default function Home() {
   const router = useRouter();
+  const { user, loading, isLandlord } = useAuth();
   const [heroTab, setHeroTab] = useState<"find" | "list">("find");
   const [selectedUniversity] = useState("1"); // Sol Plaatje — only university for now
 
@@ -457,17 +459,19 @@ export default function Home() {
                   links: [
                     { label: "Find a Room", href: "/search" },
                     { label: "How It Works", href: "#how-it-works" },
-                    { label: "Trust & Safety", href: "#trust-safety" },
                     { label: "My Account", href: "/profile" },
                   ],
                 },
                 {
                   heading: "For Landlords",
                   links: [
-                    { label: "List a Property", href: "/dashboard" },
+                    ...(isLandlord
+                      ? [{ label: "My Listings", href: "/dashboard" }]
+                      : !loading && !user
+                        ? [{ label: "List a Property", href: "/register?role=landlord" }]
+                        : []),
                     { label: "AI Insights", href: "#landlord-insights" },
-                    { label: "Verification Portal", href: "/dashboard" },
-                    { label: "Account Help", href: "/forgot-password" },
+                    { label: "Reset Password", href: "/forgot-password" },
                   ],
                 },
               ].map((col) => (
