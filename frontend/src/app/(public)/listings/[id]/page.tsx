@@ -783,10 +783,6 @@ export default function ListingDetailPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-white border border-slate-200 rounded-2xl p-6">
-                        <h2 className="font-semibold text-slate-900 mb-3">About this place</h2>
-                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">{listing!.description}</p>
-                      </div>
                       {/* Property details card */}
                       <div className="bg-white border border-slate-200 rounded-2xl p-6">
                         <h2 className="font-semibold text-slate-900 mb-4">Property details</h2>
@@ -850,6 +846,10 @@ export default function ListingDetailPage() {
                             </div>
                           </div>
                         )}
+                      </div>
+                      <div className="bg-white border border-slate-200 rounded-2xl p-6">
+                        <h2 className="font-semibold text-slate-900 mb-3">About this place</h2>
+                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">{listing!.description}</p>
                       </div>
                       <div className="bg-white border border-slate-200 rounded-2xl p-6">
                         <h2 className="font-semibold text-slate-900 mb-4">Listed by</h2>
