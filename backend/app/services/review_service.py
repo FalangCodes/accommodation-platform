@@ -101,12 +101,13 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
             # ── Update review status ───────────────────────────────────────────────
             if result["is_toxic"]:
                 review.status = "quarantined"
-                await record_quarantine(session, review)
+                await record_quarantine(session, review, reason=result.get("moderation_reason") or "Automatic review analysis flagged this review for moderation.")
                 logger.info(f"[ReviewService] Review {review_id} quarantined (spam/toxic)")
             else:
                 review.status = "analysed"
 
             await session.commit()
+            logger.info("[ReviewService] Review %s analysis decision committed — status=%s", review_id, review.status)
             try:
                 await regenerate_accommodation_insights(review.accommodation_id, session)
             finally:

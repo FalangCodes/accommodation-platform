@@ -1,4 +1,5 @@
 """Evidence-based management reports. No external AI calls or personal data."""
+from app.services.review_visibility import published_review_condition
 from collections import Counter, defaultdict
 from datetime import datetime, timezone, timedelta
 from statistics import mean
@@ -12,7 +13,6 @@ from app.models.student import Student
 from app.models.university import University
 from app.models.moderation import ModerationLog, Appeal
 
-PUBLISHED = ("analysed", "released")
 PRIORITY_LABELS = {"High": "High priority", "Medium": "Medium priority",
                    "Validate": "Validate feedback", "Maintain": "Maintain current strengths"}
 TOPICS = {
@@ -155,7 +155,7 @@ async def collect_report_data(db, report_type, entity_id, cutoff):
                    ReviewNLPResult.sentiment, ReviewNLPResult.aspects).outerjoin(
         ReviewNLPResult, ReviewNLPResult.review_id == Review.id).where(
             Review.accommodation_id.in_(ids), Review.deleted_at.is_(None),
-            Review.status.in_(PUBLISHED), Review.created_at < cutoff)
+            published_review_condition(), Review.created_at < cutoff)
     reviews = [dict(row) for row in (await db.execute(query)).mappings().all()]
     month_bucket = func.date_trunc("month", AccommodationView.viewed_at, "UTC")
     view_rows = (await db.execute(select(AccommodationView.accommodation_id,
@@ -247,7 +247,7 @@ def compose_document(data, report_type, year, month, generated_at, title):
     quality = ["Reporting month boundaries and comparison cutoffs use UTC.",
                "Page views are visits, not unique students, enquiries, applications, occupied beds or revenue.",
                "View timestamps reflect when buffered counts were flushed to the database. Unflushed views are excluded; daily activity and precise visit times cannot be reconstructed.",
-               "Published-review metrics exclude deleted, pending and quarantined reviews using their review status at generation. Historical snapshots are not reconstructed from today's listing/account status.",
+               "Published-review metrics exclude deleted, pending and quarantined reviews, plus flagged reviews without moderator release. Historical snapshots are not reconstructed from today's listing/account status.",
                "Available feedback from scoped off-market properties can still be included. Review figures do not imply that the listing is currently visible; current listing statuses are shown separately.",
                "Topics use stored AI tags (score >= 0.4) and whole-review sentiment. A positive or negative review can mention several topics; its sentiment does not establish which topic caused satisfaction or concern, or confirm a safety hazard.",
                "Percentages use reviews with recognised sentiment results as their denominator; sample sizes are shown. No individual student names, emails or verification documents are included."]

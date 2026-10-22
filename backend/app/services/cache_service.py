@@ -57,10 +57,18 @@ def key_activity() -> str:
 
 # ─── Core helpers ─────────────────────────────────────────────────────────────
 
+def _storage_key(key: str) -> str:
+    # Retire public caches built under the old status-only publication rule.
+    # Logical keys and view/auth counters remain unchanged.
+    if key.split(":", 1)[0] in {"listing", "reviews", "analytics", "search", "platform", "featured", "activity"}:
+        return "review-policy-v2:" + key
+    return key
+
+
 async def cache_get(key: str) -> Optional[Any]:
     try:
         redis = await get_redis()
-        value = await redis.get(key)
+        value = await redis.get(_storage_key(key))
         if value:
             return json.loads(value)
     except Exception as e:
@@ -70,14 +78,14 @@ async def cache_get(key: str) -> Optional[Any]:
 async def cache_set(key: str, value: Any, ttl: int) -> None:
     try:
         redis = await get_redis()
-        await redis.set(key, json.dumps(value, default=str), ex=ttl)
+        await redis.set(_storage_key(key), json.dumps(value, default=str), ex=ttl)
     except Exception as e:
         print(f"Cache SET failed for {key}: {e}")
 
 async def cache_delete(*keys: str) -> None:
     try:
         redis = await get_redis()
-        await redis.delete(*keys)
+        await redis.delete(*(_storage_key(key) for key in keys))
     except Exception as e:
         print(f"Cache DELETE failed: {e}")
 
@@ -85,7 +93,7 @@ async def cache_delete_pattern(pattern: str) -> None:
     """Delete all keys matching a pattern e.g. 'search:*'"""
     try:
         redis = await get_redis()
-        keys = await redis.keys(pattern)
+        keys = await redis.keys(_storage_key(pattern))
         if keys:
             await redis.delete(*keys)
     except Exception as e:
@@ -101,7 +109,7 @@ async def increment_view(accommodation_id: int) -> None:
     try:
         redis = await get_redis()
         await redis.incr(key_views(accommodation_id))
-        await redis.delete(key_analytics(accommodation_id))
+        await redis.delete(_storage_key(key_analytics(accommodation_id)))
     except Exception as e:
         print(f"View increment failed for {accommodation_id}: {e}")
 

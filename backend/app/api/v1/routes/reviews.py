@@ -1,3 +1,4 @@
+from app.services.review_visibility import published_review_condition
 from app.services.insight_refresh import refresh_listing_insights
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -188,7 +189,7 @@ async def get_reviews_for_accommodation(
         select(Review).where(
             Review.accommodation_id == accommodation_id,
             Review.deleted_at == None,
-            Review.status.in_(["analysed", "released"])
+            published_review_condition()
         ).order_by(Review.created_at.desc(), Review.id.desc())
     )
     reviews = result.scalars().all()

@@ -68,7 +68,7 @@ def discovery(monkeypatch):
             if any(entity in entities for entity in (ReviewNLPResult, ReviewReply, Student)):
                 return Result()
             if AccommodationInsight in entities:
-                return Result(value=SimpleNamespace(insights={"safety": {"summary": "Private insight"}},
+                return Result(value=SimpleNamespace(insights={"safety": {"summary": "Private insight", "publication_policy_version": 2}},
                                                    recommendations=["Private recommendation"], review_count=5,
                                                    generated_at=datetime.now(timezone.utc)))
             if str(statement).strip().upper().startswith("SELECT COUNT(*) FROM ("):

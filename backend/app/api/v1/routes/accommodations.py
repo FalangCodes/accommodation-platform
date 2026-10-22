@@ -1,3 +1,4 @@
+from app.services.review_visibility import published_review_condition, PUBLISHED_REVIEW_SQL
 from sqlalchemy import text, func
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ from app.services.cache_service import (
 from app.services.guest_access import GUEST_SEARCH_PAGE_SIZE, search_response
 from app.services.resource_access import owned_accommodation, visible_accommodation
 from app.services.document_links import ownership_document_link, listing_document_response
+from app.services.insight_refresh import refresh_listing_insights
 from app.api.v1.routes.documents import store_document_upload
 
 router = APIRouter(prefix="/accommodations", tags=["Accommodations"])
@@ -141,7 +143,7 @@ async def search_accommodations(
         if not university:
             raise HTTPException(status_code=404, detail="University not found")
 
-        base_sql = """
+        base_sql = f"""
             SELECT
                 a.id, a.landlord_id, a.title, a.description, a.address,
                 a.price_min, a.price_max, a.status, a.created_at,
@@ -155,7 +157,7 @@ async def search_accommodations(
                 ORDER BY display_order ASC LIMIT 1) AS cover_image
             FROM accommodations a
             JOIN universities u ON u.id = :university_id
-            LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL AND r.status IN ('analysed', 'released')
+            LEFT JOIN reviews r ON r.accommodation_id = a.id AND {PUBLISHED_REVIEW_SQL}
             WHERE a.status = 'approved'
             AND ST_DWithin(a.location, u.campus_location, :radius_meters)
         """
@@ -168,7 +170,7 @@ async def search_accommodations(
         params["university_id"] = university_id
         params["radius_meters"] = radius_km * 1000
     else:
-        base_sql = """
+        base_sql = f"""
             SELECT
                 a.id, a.landlord_id, a.title, a.description, a.address,
                 a.price_min, a.price_max, a.status, a.created_at,
@@ -181,7 +183,7 @@ async def search_accommodations(
                 WHERE accommodation_id = a.id
                 ORDER BY display_order ASC LIMIT 1) AS cover_image
             FROM accommodations a
-            LEFT JOIN reviews r ON r.accommodation_id = a.id AND r.deleted_at IS NULL AND r.status IN ('analysed', 'released')
+            LEFT JOIN reviews r ON r.accommodation_id = a.id AND {PUBLISHED_REVIEW_SQL}
             WHERE a.status = 'approved'
         """
         group_by = """
@@ -280,7 +282,7 @@ async def get_my_accommodations(
         reviews_result = await db.execute(
             select(Review).where(
                 Review.accommodation_id == acc.id,
-                Review.deleted_at == None, Review.status.in_(["analysed", "released"])
+                Review.deleted_at == None, published_review_condition()
             )
         )
         reviews = reviews_result.scalars().all()
@@ -333,7 +335,7 @@ async def get_platform_stats(
     # Total published reviews on approved listings
     reviews_result = await db.execute(
         select(func.count()).where(
-            Review.deleted_at == None, Review.status.in_(["analysed", "released"])
+            Review.deleted_at == None, published_review_condition()
         ).select_from(Review).join(Accommodation, Accommodation.id == Review.accommodation_id).where(Accommodation.status == "approved")
     )
     total_reviews = reviews_result.scalar() or 0
@@ -370,7 +372,7 @@ async def get_featured_listings(
         return cached
 
     result = await db.execute(
-        text("""
+        text(f"""
             SELECT
                 a.id,
                 a.title,
@@ -389,7 +391,7 @@ async def get_featured_listings(
                 ) AS first_image_url
             FROM accommodations a
             LEFT JOIN reviews r
-                ON r.accommodation_id = a.id AND r.deleted_at IS NULL AND r.status IN ('analysed', 'released')
+                ON r.accommodation_id = a.id AND {PUBLISHED_REVIEW_SQL}
             LEFT JOIN accommodation_views av
                 ON av.accommodation_id = a.id
             WHERE a.status = 'approved'
@@ -438,12 +440,11 @@ async def get_activity_feed(
 
     # Pull a random sample of analysed, non-deleted reviews with listing title
     reviews_result = await db.execute(
-        text("""
+        text(f"""
             SELECT r.rating, a.title AS accommodation_title
             FROM reviews r
             JOIN accommodations a ON a.id = r.accommodation_id
-            WHERE r.deleted_at IS NULL
-              AND r.status IN ('analysed', 'released')
+            WHERE {PUBLISHED_REVIEW_SQL}
               AND a.status = 'approved'
             ORDER BY RANDOM()
             LIMIT 8
@@ -500,7 +501,7 @@ async def get_analytics(
     # 3. Reviews stats
     query = select(Review).where(
         Review.accommodation_id == accommodation_id,
-        Review.deleted_at == None, Review.status.in_(["analysed", "released"])
+        Review.deleted_at == None, published_review_condition()
     )
     result = await db.execute(query)
     reviews = result.scalars().all()
@@ -614,7 +615,7 @@ async def get_accommodation(
     reviews_result = await db.execute(
         select(Review).where(
             Review.accommodation_id == accommodation_id,
-            Review.deleted_at == None, Review.status.in_(["analysed", "released"])
+            Review.deleted_at == None, published_review_condition()
         )
     )
     reviews = reviews_result.scalars().all()
@@ -825,6 +826,18 @@ async def get_accommodation_insights(
         )
     )
     insight = result.scalar_one_or_none()
+
+    if insight and insight.insights and any(
+        not isinstance(item, dict) or item.get("publication_policy_version") != 2
+        for item in insight.insights.values()
+    ):
+        # Rebuild stale derived opinions without changing review decisions or
+        # contacting Gemini. Moderator-released reviews remain eligible.
+        await refresh_listing_insights(accommodation_id, db)
+        result = await db.execute(select(AccommodationInsight).where(
+            AccommodationInsight.accommodation_id == accommodation_id
+        ).execution_options(populate_existing=True))
+        insight = result.scalar_one_or_none()
 
     if not insight:
         return {"insights": {}, "recommendations": [], "review_count": 0}

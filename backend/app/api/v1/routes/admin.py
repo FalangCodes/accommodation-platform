@@ -1,3 +1,4 @@
+from app.services.review_visibility import published_review_condition
 from app.services.document_links import ownership_document_link, landlord_document_link
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,7 +112,7 @@ async def get_platform_stats(
             func.count(Review.id).label("review_count")
         )
         .join(Review, Review.accommodation_id == Accommodation.id)
-        .where(Review.deleted_at == None, Review.status.in_(["analysed", "released"]))
+        .where(Review.deleted_at == None, published_review_condition())
         .group_by(Accommodation.id, Accommodation.title, Accommodation.address)
         .having(func.count(Review.id) >= 2)
         .order_by(func.avg(Review.rating).desc())
@@ -208,7 +209,7 @@ async def get_universities_tree(
                 select(func.count(Review.id), func.avg(Review.rating)).where(
                     Review.accommodation_id == acc.id,
                     Review.deleted_at == None,
-                    Review.status.in_(["analysed", "released"])
+                    published_review_condition()
                 )
             )
             review_row = review_result.one()

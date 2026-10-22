@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import func
 from app.models.review import Review, ReviewNLPResult
 from app.models.insight import AccommodationInsight
+from app.services.review_visibility import published_review_condition
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +412,7 @@ async def generate_opinion(
     top_concern: str | None,
     mention_count: int = 0,
     positive_rate: int = 0,
+    allow_ai: bool = False,
 ) -> str:
     """
     Generate a human-sounding 1-sentence opinion for an aspect using Gemini Flash.
@@ -436,7 +438,7 @@ async def generate_opinion(
         return template.format(concern=concern_suffix, strength=strength_suffix)
 
     # ── Skip Gemini if key is not configured ─────────────────────────────────
-    if not settings.GEMINI_API_KEY:
+    if not allow_ai or not settings.GEMINI_API_KEY:
         return _template_fallback()
 
     try:
@@ -500,8 +502,7 @@ async def regenerate_accommodation_insights(
         .outerjoin(ReviewNLPResult, ReviewNLPResult.review_id == Review.id)
         .where(
             Review.accommodation_id == accommodation_id,
-            Review.deleted_at == None,
-            Review.status.in_(["analysed", "released"])
+            published_review_condition(),
         )
     )
     rows = result.all()
@@ -586,6 +587,7 @@ async def regenerate_accommodation_insights(
             student_sentiment = "mixed"
 
         insights[aspect] = {
+            "publication_policy_version": 2,
             "display_name": ASPECT_DISPLAY_NAMES.get(aspect, aspect),
             "sentiment_label": SENTIMENT_DISPLAY[sentiment_label],
             "student_sentiment": SENTIMENT_DISPLAY.get(student_sentiment, "Mixed"),

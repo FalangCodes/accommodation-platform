@@ -64,7 +64,7 @@ def resources(monkeypatch):
         AccommodationImage: [SimpleNamespace(id=1, accommodation_id=1, blob_url="mock://image1"),
                              SimpleNamespace(id=2, accommodation_id=2, blob_url="mock://image2")],
         Review: [SimpleNamespace(id=1, student_id=1, deleted_at=datetime.now(timezone.utc), deleted_by=6, status="analysed"), SimpleNamespace(id=2, student_id=2)],
-        AccommodationInsight: [SimpleNamespace(accommodation_id=1, insights={"safety": {"summary": "Hidden insight"}},
+        AccommodationInsight: [SimpleNamespace(accommodation_id=1, insights={"safety": {"summary": "Hidden insight", "publication_policy_version": 2}},
                                                 recommendations=[], review_count=1, generated_at=datetime.now(timezone.utc))],
     }
     cache = {"listing:1": {"id": 1, "title": "Hidden listing", "status": "approved"},
