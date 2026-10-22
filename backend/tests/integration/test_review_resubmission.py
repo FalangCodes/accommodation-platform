@@ -66,6 +66,9 @@ async def isolated_reviews(monkeypatch):
             db.add(Accommodation(id=1, landlord_id=1, title="Test listing", description="Test description",
                                  address="Test address", location="SRID=4326;POINT(24.75 -28.75)",
                                  price_min=1000, price_max=1500, status="approved"))
+            # Explicit seed IDs do not advance PostgreSQL's sequence. Allow
+            # subsequent automatic users, including the audit actor, to insert.
+            await db.execute(text("SELECT setval(pg_get_serial_sequence('users','id'), (SELECT max(id) FROM users))"))
             await db.commit()
         effects = []
 
