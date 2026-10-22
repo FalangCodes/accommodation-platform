@@ -9,7 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-export function EnquiryButton({ listingId, listingTitle }: { listingId: number; listingTitle: string }) {
+export function EnquiryButton({ listingId, listingTitle, label = "Contact landlord", className }: {
+  listingId: number; listingTitle: string; label?: string; className?: string;
+}) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -60,8 +62,8 @@ export function EnquiryButton({ listingId, listingTitle }: { listingId: number; 
   return (
     <>
       <Button disabled={user?.role !== "student"} onClick={() => setOpen(true)}
-        className="w-full bg-white text-slate-900 hover:bg-slate-100 rounded-xl font-semibold">
-        {user?.role === "student" ? "Contact landlord" : "Student enquiries only"}
+        className={className ?? "w-full bg-white text-slate-900 hover:bg-slate-100 rounded-xl font-semibold"}>
+        {user?.role === "student" ? label : "Student enquiries only"}
       </Button>
       <Dialog open={open} onOpenChange={value => { if (!sending) setOpen(value); }}>
         <DialogContent className="bg-white text-slate-900 rounded-2xl">

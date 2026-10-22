@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/page-layout";
-import { EnquiryButton } from "@/components/enquiry-button";
+import { ListingActions, listingWebsiteUrl } from "@/components/listing-actions";
 import { LandlordReplyForm } from "@/components/landlord-reply-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, accommodationsApi } from "@/lib/api";
@@ -587,6 +587,7 @@ export default function ListingDetailPage() {
     queryKey: ["listing", id],
     queryFn: () => fetchListing(id),
   });
+  const websiteUrl = listingWebsiteUrl(listing?.website);
 
   const { data: reviewPreview, isLoading: reviewsLoading } = useQuery({
     queryKey: ["reviews", id, user?.id ?? "guest"],
@@ -698,7 +699,7 @@ export default function ListingDetailPage() {
 
   return (
     <PageLayout>
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-slate-50 pb-[calc(10rem+env(safe-area-inset-bottom))] lg:pb-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
 
           <button
@@ -793,7 +794,7 @@ export default function ListingDetailPage() {
                             <div>
                               <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Type</p>
                               <p className="text-sm font-medium text-slate-700 capitalize">
-                                {listing!.property_type.replace("_", " ")}
+                                {listing!.property_type === "mixed" ? "Private and shared rooms" : listing!.property_type.replace("_", " ")}
                               </p>
                             </div>
                           )}
@@ -817,11 +818,11 @@ export default function ListingDetailPage() {
                               </p>
                             </div>
                           )}
-                          {listing!.website && (
+                          {websiteUrl && (
                             <div>
                               <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Website</p>
                               <a
-                                href={listing!.website}
+                                href={websiteUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-sm font-medium text-blue-600 hover:underline"
@@ -1052,7 +1053,7 @@ export default function ListingDetailPage() {
                     )}
                   </div>
 
-                  <div className="bg-slate-900 rounded-2xl p-5 text-white">
+                  <div className="hidden lg:block bg-slate-900 rounded-2xl p-5 text-white">
                     <div className="text-2xl font-bold mb-1">
                       R{listing.price_min.toLocaleString()}
                       {listing.price_max > listing.price_min && (
@@ -1060,13 +1061,7 @@ export default function ListingDetailPage() {
                       )}
                     </div>
                     <div className="text-slate-400 text-sm mb-4">per month</div>
-                    {isGuest ? (
-                      <Button asChild className="w-full bg-white text-slate-900 hover:bg-slate-100 rounded-xl font-semibold">
-                        <Link href={`/login?redirect=/listings/${id}`}>Sign in to enquire</Link>
-                      </Button>
-                    ) : (
-                      <EnquiryButton listingId={listing.id} listingTitle={listing.title} />
-                    )}
+                    <ListingActions listingId={listing.id} listingTitle={listing.title} website={websiteUrl} dark />
                   </div>
 
                   {canModerate && (
@@ -1107,6 +1102,19 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </div>
+
+      {listing && <div className="fixed inset-x-0 bottom-0 z-40 lg:hidden border-t border-slate-200 bg-white/95 backdrop-blur-sm px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="max-w-7xl mx-auto flex items-start gap-3">
+          <div className="w-28 shrink-0 pt-1">
+            <p className="font-bold text-slate-900">R{listing.price_min.toLocaleString()}</p>
+            {listing.price_max > listing.price_min && <p className="text-xs text-slate-500">– R{listing.price_max.toLocaleString()}</p>}
+            <p className="text-xs text-slate-500">per month</p>
+          </div>
+          <div className="flex-1 min-w-0">
+            <ListingActions listingId={listing.id} listingTitle={listing.title} website={websiteUrl} />
+          </div>
+        </div>
+      </div>}
 
       {/* Write Review Modal */}
       {listing && (
