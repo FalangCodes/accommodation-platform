@@ -54,6 +54,50 @@ async def submit(client, kind, resource_id, user_id, action_id=None):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("original_status", ["analysed", "quarantined"])
+async def test_student_history_distinguishes_removal_and_supports_appeal(workflow, original_status):
+    client, sessions, student_headers, admin_headers, _ = workflow
+    review_id = await historical_review(sessions, deleted=False, status=original_status)
+    before = (await client.get("/api/v1/reviews/my", headers=student_headers)).json()[0]
+    assert before["status"] == original_status
+    assert before["removal_reason"] is None and before["removed_at"] is None
+    # A previous removal must not supply the reason for the current decision.
+    await penalty(sessions, "review", review_id, "remove_review")
+    reason = "The review contains targeted abusive language."
+    removed = await client.request("DELETE", f"/api/v1/moderation/reviews/{review_id}",
+                                  headers=headers(4), json={"reason": reason})
+    assert removed.status_code == 200
+    history = (await client.get("/api/v1/reviews/my", headers=student_headers)).json()
+    assert len(history) == 1
+    assert history[0]["status"] == "removed" and history[0]["removal_reason"] == reason
+    assert history[0]["removed_at"] is not None
+    async with sessions() as db:
+        assert (await db.get(Review, review_id)).status == original_status
+    public = (await client.get("/api/v1/reviews/accommodation/1", headers=student_headers)).json()
+    assert public["total"] == 0
+    assert (await client.get("/api/v1/reviews/my", headers=admin_headers)).status_code == 403
+    appeal = await submit(client, "review", review_id, 1)
+    assert appeal.status_code == 201
+    resolved = await client.patch(f"/api/v1/moderation/appeals/{appeal.json()['id']}/resolve",
+                                 headers=admin_headers, json={"decision": "upheld"})
+    assert resolved.status_code == 200
+    restored = (await client.get("/api/v1/reviews/my", headers=student_headers)).json()[0]
+    assert restored["status"] == "released"
+    assert restored["removal_reason"] is None and restored["removed_at"] is None
+    assert (await client.delete(f"/api/v1/reviews/{review_id}", headers=student_headers)).status_code == 204
+    assert (await client.get("/api/v1/reviews/my", headers=student_headers)).json() == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_removed_review_without_audit_reason_remains_private_history(workflow):
+    client, sessions, student_headers, _, _ = workflow
+    await historical_review(sessions)
+    history = (await client.get("/api/v1/reviews/my", headers=student_headers)).json()
+    assert len(history) == 1 and history[0]["status"] == "removed"
+    assert history[0]["removal_reason"] is None and history[0]["removed_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_moderators_cannot_list_or_resolve_appeals(workflow):
     client, sessions, _, _, _ = workflow
     old_id = await historical_review(sessions)

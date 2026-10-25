@@ -15,6 +15,7 @@ from app.models.accommodation import Accommodation
 from app.models.landlord import Landlord
 from app.core.dependencies import get_current_landlord
 from app.models.review import Review, ReviewReply, ReviewNLPResult
+from app.models.moderation import ModerationLog
 from app.schemas.review import ReviewCreate, ReviewResponse, ReviewReplyCreate, ReviewReplyResponse
 from app.services.review_service import process_review_nlp
 from app.services.cache_service import cache_delete, cache_delete_pattern, key_listing, key_reviews, key_analytics, cache_get, cache_set, TTL_REVIEWS, key_featured, key_activity, key_platform_stats
@@ -127,6 +128,22 @@ async def get_my_reviews(
     )
     acc_map = {a.id: a for a in acc_result.scalars().all()}
 
+    # Preserve the stored analysis status; expose moderator removals separately
+    # in the author's private history, using the existing audit log for reasons.
+    removed_ids = [r.id for r in reviews if r.deleted_at is not None]
+    removal_reasons = {}
+    if removed_ids:
+        removals = await db.execute(
+            select(ModerationLog.resource_id, ModerationLog.reason).where(
+                ModerationLog.resource_type == "review",
+                ModerationLog.resource_id.in_(removed_ids),
+                ModerationLog.action == "remove_review",
+            ).order_by(ModerationLog.id.desc())
+        )
+        for review_id, reason in removals:
+            if review_id not in removal_reasons:
+                removal_reasons[review_id] = reason
+
     return [
         {
             "id": r.id,
@@ -134,7 +151,9 @@ async def get_my_reviews(
             "accommodation_title": acc_map[r.accommodation_id].title if r.accommodation_id in acc_map else "Unknown listing",
             "rating": r.rating,
             "body": r.body,
-            "status": "quarantined" if r.deleted_at is not None else r.status,
+            "status": "removed" if r.deleted_at is not None else r.status,
+            "removal_reason": removal_reasons.get(r.id) if r.deleted_at is not None else None,
+            "removed_at": r.deleted_at,
             "created_at": r.created_at,
         }
         for r in reviews

@@ -31,6 +31,8 @@ interface Review {
   body: string;
   status: string;
   created_at: string;
+  removal_reason?: string | null;
+  removed_at?: string | null;
 }
 
 interface LandlordProfile {
@@ -218,33 +220,42 @@ function StudentProfile({ user }: { user: any }) {
                       </span>
                       <Badge className={`text-xs border-0 rounded-full ${
                         review.status === "analysed" || review.status === "released" ? "bg-emerald-50 text-emerald-700" :
-                        review.status === "quarantined" ? "bg-red-50 text-red-700" :
+                        review.status === "quarantined" || review.status === "removed" ? "bg-red-50 text-red-700" :
                         "bg-amber-50 text-amber-700"
                       }`}>
                         {review.status === "analysed" || review.status === "released" ? "✓ Published" :
+                         review.status === "removed" ? "Removed by moderator" :
                          review.status === "quarantined" ? "⚠️ Under review" : "⏳ Pending analysis"}
                       </Badge>
                     </div>
+                    {review.status === "removed" && (
+                      <div className="mt-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-900">
+                        <p>This review is no longer public. It remains in your private history so you can appeal the decision.</p>
+                        <p className="mt-1"><strong>Reason:</strong> {review.removal_reason || "No removal reason was recorded."}</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Action buttons */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {/* Appeal — only for quarantined reviews */}
-                    {review.status === "quarantined" && (
+                    {/* Both quarantine and moderator removal can be appealed. */}
+                    {(review.status === "quarantined" || review.status === "removed") && (
                       <button
                         onClick={() => { setAppealTarget(review); setAppealReason(""); }}
                         className="p-2 rounded-xl text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
                         title="Appeal this moderation decision"
+                        aria-label="Appeal this moderation decision"
                       >
                         <Flag className="h-4 w-4" />
                       </button>
                     )}
-                    <button
+                    {review.status !== "removed" && <button
                       onClick={() => setDeleteTarget(review.id)}
+                      aria-label="Delete this review"
                       className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </button>
+                    </button>}
                   </div>
                 </div>
               </div>
@@ -283,7 +294,7 @@ function StudentProfile({ user }: { user: any }) {
             </div>
             <DialogTitle className="text-center">Appeal moderation decision</DialogTitle>
             <DialogDescription className="text-center text-sm">
-              Explain why you believe your review was incorrectly flagged. An administrator will review your appeal.
+              Explain why you believe this moderation decision should be reconsidered. An administrator will review your appeal.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2">
