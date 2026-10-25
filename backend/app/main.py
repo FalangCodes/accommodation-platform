@@ -15,6 +15,7 @@ from app.api.v1.routes.enquiries import router as enquiries_router
 from app.db.base import AsyncSessionLocal
 from app.services.cache_service import flush_views_to_db
 from app.services.report_service import run_monthly_auto_reports
+from app.services.scheduled_summaries import run_due_summaries
 from app.models.review import Review
 from app.core.config import settings
 import app.db.models
@@ -85,6 +86,16 @@ async def lifespan(app: FastAPI):
         "interval",
         minutes=10,
         id="sweep_stuck_reviews",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Check persisted eligibility hourly: restart never resets the fortnight.
+    scheduler.add_job(
+        run_due_summaries,
+        "interval",
+        hours=1,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        id="fortnightly_summaries",
         max_instances=1,
         coalesce=True,
     )

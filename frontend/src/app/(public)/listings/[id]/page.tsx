@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/page-layout";
 import { ListingActions, listingWebsiteUrl } from "@/components/listing-actions";
+import { SummaryUpdated } from "@/components/summary-updated";
 import { LandlordReplyForm } from "@/components/landlord-reply-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, accommodationsApi } from "@/lib/api";
@@ -246,7 +247,7 @@ function WriteReviewModal({
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">Review submitted!</h3>
             <p className="text-sm text-slate-500">
-              Your review is being analysed by our AI. It will appear publicly once analysis is complete — usually within 30 seconds.
+              Your review will appear publicly after analysis and any required moderation. Processing may take longer when the analysis service is busy.
             </p>
           </div>
         ) : (
@@ -393,6 +394,8 @@ function AspectInsightCard({
   sentimentLabel,
   starRating,
   overallOpinion,
+  summaryGeneratedAt,
+  summaryReviewCount,
   topStrengths,
   topConcerns,
   mentionCount,
@@ -402,6 +405,8 @@ function AspectInsightCard({
   sentimentLabel: string;
   starRating: number;
   overallOpinion: string;
+  summaryGeneratedAt?: string;
+  summaryReviewCount?: number;
   topStrengths: string[];
   topConcerns: string[];
   mentionCount: number;
@@ -437,6 +442,7 @@ function AspectInsightCard({
       <p className="text-xs text-slate-600 leading-relaxed mb-2 italic">
         "{overallOpinion}"
       </p>
+      <SummaryUpdated generatedAt={summaryGeneratedAt} reviewCount={summaryReviewCount} />
 
       {/* Strengths */}
       {topStrengths.length > 0 && (
@@ -1018,6 +1024,7 @@ export default function ListingDetailPage() {
                             </div>
                           ) : insights && Object.keys(insights.insights ?? {}).length > 0 ? (
                             <div className="space-y-2">
+                              <p className="text-xs text-slate-500">Figures reflect current published reviews. Written summaries refresh every two weeks.</p>
                               {Object.entries(insights.insights)
                                 .filter(([, data]: [string, any]) => data.show_to_students)
                                 .map(([aspect, data]: [string, any]) => {
@@ -1030,6 +1037,8 @@ export default function ListingDetailPage() {
                                       sentimentLabel={data.student_sentiment}
                                       starRating={data.star_rating}
                                       overallOpinion={data.overall_opinion}
+                                      summaryGeneratedAt={data.summary_generated_at}
+                                      summaryReviewCount={data.summary_review_count}
                                       topStrengths={data.strengths}
                                       topConcerns={data.concerns}
                                       mentionCount={data.mention_count}

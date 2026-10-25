@@ -53,7 +53,10 @@ return 1
 
 
 class GeminiDeferred(Exception):
-    pass
+    def __init__(self, message, retry_after=60, attempted=False):
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.attempted = attempted
 
 
 def create_client():
@@ -97,12 +100,18 @@ async def generate_content(client_factory, **kwargs):
     except Exception:
         raise GeminiDeferred("Shared admission storage unavailable; review remains pending") from None
     if delay:
-        raise GeminiDeferred(f"Shared cooldown or request pacing active; retry in at least {(delay + 999) // 1000}s")
+        seconds = (delay + 999) // 1000
+        raise GeminiDeferred(f"Shared cooldown or request pacing active; retry in at least {seconds}s", retry_after=seconds)
     outcome = "success"
     try:
         # No SDK retry loop: application scheduling owns retries and cooldowns.
         client = client_factory()
         return await asyncio.to_thread(client.models.generate_content, **kwargs)
+    except asyncio.CancelledError:
+        # Cancelling to_thread does not stop its HTTP request. Retain the lease
+        # until expiry so a scheduler shutdown cannot start an overlapping call.
+        outcome = "cancelled"
+        raise
     except Exception as error:
         outcome = "quota" if is_quota_error(error) else "temporary"
         if outcome == "quota":
@@ -111,12 +120,14 @@ async def generate_content(client_factory, **kwargs):
         else:
             logger.warning("[Gemini] Provider failure; applying bounded shared backoff")
         # Do not log provider payloads, prompts or credentials.
-        raise GeminiDeferred("Quota cooldown active" if outcome == "quota" else "Temporary Gemini failure") from None
+        raise GeminiDeferred("Quota cooldown active" if outcome == "quota" else "Temporary Gemini failure",
+                             retry_after=QUOTA_SECONDS if outcome == "quota" else 60, attempted=True) from None
     finally:
-        try:
-            finished = await redis.eval(FINISH, 5, *KEYS, token, outcome, QUOTA_SECONDS, SPACING_MS)
-            if not finished:
-                logger.error("[Gemini] Request lease expired before completion")
-        except Exception:
-            # Keep the lease in place rather than allowing an immediate burst.
-            logger.error("[Gemini] Could not persist request outcome; shared gate must recover before retry")
+        if outcome != "cancelled":
+            try:
+                finished = await redis.eval(FINISH, 5, *KEYS, token, outcome, QUOTA_SECONDS, SPACING_MS)
+                if not finished:
+                    logger.error("[Gemini] Request lease expired before completion")
+            except Exception:
+                # Keep the lease in place rather than allowing an immediate burst.
+                logger.error("[Gemini] Could not persist request outcome; shared gate must recover before retry")

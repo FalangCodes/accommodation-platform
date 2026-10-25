@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api, accommodationsApi } from "@/lib/api";
 import PageLayout from "@/components/page-layout";
 import { LandlordReports } from "@/components/management-report";
+import { SummaryUpdated } from "@/components/summary-updated";
 import ImageUploader from "@/components/image-uploader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -663,6 +664,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
       </span>
     </div>
 
+    <p className="mb-4 text-xs text-slate-500">Figures reflect current published reviews. Written summaries refresh every two weeks.</p>
     {/* Aspect breakdown */}
     <div className="space-y-3 mb-6">
       {Object.entries(insights.insights).map(([aspect, data]: [string, any]) => {
@@ -707,6 +709,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
             {data.overall_opinion && (
               <p className="text-xs text-slate-500 italic mb-2">"{data.overall_opinion}"</p>
             )}
+            <SummaryUpdated generatedAt={data.summary_generated_at} reviewCount={data.summary_review_count} />
 
             {/* Progress bar */}
             <div className="flex items-center gap-2 mb-2">
@@ -771,6 +774,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
                 </span>
               </div>
               <p className="text-xs text-slate-700 leading-relaxed">{rec.recommendation}</p>
+              <SummaryUpdated generatedAt={rec.summary_generated_at} reviewCount={rec.summary_review_count} />
             </div>
           ))}
         </div>

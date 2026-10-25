@@ -496,6 +496,10 @@ async def regenerate_accommodation_insights(
     from sqlalchemy import text
     await db.execute(text("SELECT pg_advisory_xact_lock(193732, :listing)"),
                      {"listing": accommodation_id})
+    existing = (await db.execute(select(AccommodationInsight).where(
+        AccommodationInsight.accommodation_id == accommodation_id
+    ).execution_options(populate_existing=True))).scalar_one_or_none()
+    previous = existing.insights if existing else {}
     result = await db.execute(
         select(Review, ReviewNLPResult)
         .outerjoin(ReviewNLPResult, ReviewNLPResult.review_id == Review.id)
@@ -617,6 +621,9 @@ async def regenerate_accommodation_insights(
 
     # Sort recommendations by priority
     recommendations.sort(key=lambda x: x["priority"] == "high", reverse=True)
+
+    from app.services.summary_state import preserve_summaries
+    preserve_summaries(insights, recommendations, previous, {review.id for review, _ in rows})
 
     # Upsert
     from sqlalchemy.dialects.postgresql import insert as pg_insert

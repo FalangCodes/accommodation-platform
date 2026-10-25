@@ -842,8 +842,9 @@ async def get_accommodation_insights(
     if not insight:
         return {"insights": {}, "recommendations": [], "review_count": 0}
 
+    from app.services.summary_state import public_insights
     return {
-        "insights": insight.insights,
+        "insights": public_insights(insight.insights),
         "recommendations": insight.recommendations,
         "review_count": insight.review_count,
         "generated_at": insight.generated_at,

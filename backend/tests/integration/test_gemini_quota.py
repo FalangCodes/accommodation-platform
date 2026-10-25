@@ -1,6 +1,7 @@
 """Azure-only real Redis admission tests; Gemini calls are always mocked."""
 import asyncio
 import uuid
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -215,3 +216,32 @@ def test_sdk_has_one_attempt_and_a_bounded_timeout(monkeypatch):
     gate.create_client()
     assert options[0]["http_options"].retry_options.attempts == 1
     assert options[0]["http_options"].timeout == 60000
+
+
+@pytest.mark.asyncio
+async def test_cancelled_job_keeps_admission_lease_until_expiry(admission):
+    redis, prefix = admission
+    entered, release = threading.Event(), threading.Event()
+    def generate(**kwargs):
+        entered.set()
+        release.wait(5)
+        return SimpleNamespace(text="ok")
+    factory = lambda: SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    task = asyncio.create_task(gate.generate_content(factory))
+    try:
+        for _ in range(100):
+            if entered.is_set():
+                break
+            await asyncio.sleep(.01)
+        assert entered.is_set()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert await redis.exists(prefix + gate.KEYS[2])
+        with pytest.raises(gate.GeminiDeferred):
+            await gate.generate_content(factory)
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
