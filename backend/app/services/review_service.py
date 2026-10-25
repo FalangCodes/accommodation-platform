@@ -33,7 +33,7 @@ async def process_review_nlp(review_id: int, review_text: str, db=None):
     result = await analyse_review(review_id, review_text)
 
     if not result:
-        logger.warning(f"[ReviewService] NLP returned no result for review {review_id} — will retry on next sweep")
+        logger.warning(f"[ReviewService] NLP deferred or failed for review {review_id} — remains pending for a later eligible sweep")
         return
 
     async with AsyncSessionLocal() as session:

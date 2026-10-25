@@ -30,29 +30,34 @@ async def sweep_stuck_reviews():
     """
     Retry NLP analysis for reviews stuck in pending_analysis for more than 5 minutes.
 
-    A 4-second delay is enforced between each review to act as a rate-limit
-    governor, keeping us safely under Gemini's 15 RPM free tier limit.
-    At 4s per review that's a max of 15 requests/min — exactly at the limit.
+    Shared admission control covers submissions and summaries too. A quota
+    failure pauses requests for 24 hours, without repeatedly probing Gemini.
     """
     import asyncio
     from app.services.review_service import process_review_nlp
+    from app.services.gemini_gateway import pause_seconds, SPACING_MS
+    if await pause_seconds():
+        return
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Review).where(
                 Review.status == "pending_analysis",
+                Review.deleted_at.is_(None),
                 Review.created_at < cutoff
-            )
+            ).order_by(Review.created_at, Review.id).limit(100)
         )
         stuck = result.scalars().all()
         if stuck:
             print(f"[Sweep] Found {len(stuck)} stuck review(s) — retrying NLP...")
-        for review in stuck:
+        for index, review in enumerate(stuck):
+            if await pause_seconds():
+                break
             await process_review_nlp(review.id, review.body)
-            if len(stuck) > 1:
-                # Rate-limit governor: gemini-3.6-flash free tier = 5 RPM max
-                # 60s / 5 = 12s per request minimum. 13s gives a safe buffer.
-                await asyncio.sleep(13)
+            if await pause_seconds():
+                break
+            if index < len(stuck) - 1:
+                await asyncio.sleep(SPACING_MS / 1000)
 
 
 @asynccontextmanager
@@ -79,7 +84,9 @@ async def lifespan(app: FastAPI):
         sweep_stuck_reviews,
         "interval",
         minutes=10,
-        id="sweep_stuck_reviews"
+        id="sweep_stuck_reviews",
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.start()
     print("Scheduler started")

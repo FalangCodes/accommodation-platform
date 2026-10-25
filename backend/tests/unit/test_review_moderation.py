@@ -1,5 +1,6 @@
 """Mocked provider and cache checks; execute with the Azure backend suite."""
 import fnmatch
+import asyncio
 import json
 import threading
 from types import SimpleNamespace
@@ -21,6 +22,11 @@ def provider(monkeypatch, payload=None, error=None):
             raise error
         return SimpleNamespace(text=json.dumps(payload))
     monkeypatch.setattr(nlp_service, "_get_client", lambda: SimpleNamespace(models=SimpleNamespace(generate_content=generate)))
+    # These tests isolate structured output. Shared Redis admission is exercised
+    # separately by test_gemini_quota.py with real Redis and a mocked provider.
+    async def ungated(factory, **kwargs):
+        return await asyncio.to_thread(factory().models.generate_content, **kwargs)
+    monkeypatch.setattr(nlp_service, "generate_content", ungated)
     return calls
 
 

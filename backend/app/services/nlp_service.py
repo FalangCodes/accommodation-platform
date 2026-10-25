@@ -22,6 +22,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.services.gemini_gateway import create_client, generate_content, MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def _get_client() -> genai.Client:
             raise RuntimeError(
                 "GEMINI_API_KEY is not set. Add it to your .env or environment variables."
             )
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        _client = create_client()
     return _client
 
 
@@ -121,10 +122,8 @@ Review text:
 """
 
     try:
-        client = _get_client()
-
-        response = await asyncio.to_thread(client.models.generate_content,
-            model="gemini-3.6-flash",
+        response = await generate_content(_get_client,
+            model=MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,

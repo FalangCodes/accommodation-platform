@@ -442,10 +442,9 @@ async def generate_opinion(
         return _template_fallback()
 
     try:
-        from google import genai
+        from app.services.gemini_gateway import create_client, generate_content, MODEL
         from google.genai import types
 
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
         display_name = ASPECT_DISPLAY_NAMES.get(aspect, aspect)
 
         # Build context for Gemini
@@ -465,8 +464,8 @@ async def generate_opinion(
             f"Write in third person. Do not start with 'Students'. Be natural and factual."
         )
 
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
+        response = await generate_content(create_client,
+            model=MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.3,
