@@ -2,6 +2,7 @@
 
 import { FlaggedReviewQueue, FlaggedReviewCount } from "@/components/flagged-review-queue";
 import { ProtectedDocumentLink } from "@/components/protected-document-link";
+import { AppealReviewContext, type AppealReview } from "@/components/appeal-review-context";
 
 import { isAxiosError } from "axios";
 import { useState, useEffect } from "react";
@@ -32,6 +33,7 @@ interface PendingAppeal {
   original_action_id: number;
   appellant_email: string | null;
   original_action: { action: string; reason: string | null; created_at: string } | null;
+  original_review?: AppealReview | null;
   reason: string;
   status: string;
 }
@@ -482,6 +484,7 @@ function AppealsTab({
                   {appeal.resource_type} #{appeal.resource_id}
                 </span>
               </div>
+              {appeal.resource_type === "review" && <AppealReviewContext review={appeal.original_review} />}
               {appeal.original_action && (
                 <div className="mb-3 text-sm text-slate-600">
                   <p>Original action: {appeal.original_action.action.replaceAll("_", " ")}</p>
@@ -490,8 +493,8 @@ function AppealsTab({
               )}
               <div className="mb-3">
                 <p className="text-xs font-semibold text-slate-600 mb-1">Reason provided:</p>
-                <p className="text-sm text-slate-700 leading-relaxed italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  "{appeal.reason}"
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  {appeal.reason}
                 </p>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -544,7 +547,7 @@ function ResolveAppealModal({
 
   return (
     <Dialog open={open} onOpenChange={() => { if (!loading) { onClose(); setReason(""); } }}>
-      <DialogContent className="rounded-2xl max-w-md bg-white">
+      <DialogContent className="rounded-2xl max-w-md max-h-[90dvh] overflow-y-auto bg-white">
         <DialogHeader>
           <div className={`flex items-center justify-center w-12 h-12 rounded-2xl border mx-auto mb-2 ${
             isUpheld ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"
@@ -561,6 +564,13 @@ function ResolveAppealModal({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
+          {appeal?.resource_type === "review" && <AppealReviewContext review={appeal.original_review} />}
+          {appeal && (
+            <div className="space-y-2 text-sm text-slate-700">
+              <p className="whitespace-pre-wrap break-words"><strong>Moderation reason:</strong> {appeal.original_action?.reason || "No reason recorded."}</p>
+              <p className="whitespace-pre-wrap break-words"><strong>Appeal reason:</strong> {appeal.reason}</p>
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
               Reason (Optional, for internal log)

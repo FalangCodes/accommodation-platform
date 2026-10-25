@@ -425,8 +425,24 @@ async def get_pending_appeals(
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Appeal).where(Appeal.status == "pending").order_by(Appeal.id.asc()))
+    pending = result.scalars().all()
+    review_ids = [appeal.resource_id for appeal in pending if appeal.resource_type == "review"]
+    review_context = {}
+    if review_ids:
+        rows = await db.execute(select(Review, Accommodation.title).outerjoin(
+            Accommodation, Accommodation.id == Review.accommodation_id
+        ).where(Review.id.in_(review_ids)))
+        for review, title in rows:
+            # Removed reviews are retained for appeal context; do not apply the
+            # public review filter to this admin-only endpoint.
+            review_context[review.id] = {
+                "id": review.id, "body": review.body, "rating": review.rating,
+                "created_at": review.created_at,
+                "status": "removed" if review.deleted_at is not None else review.status,
+                "accommodation_id": review.accommodation_id, "accommodation_title": title,
+            }
     output = []
-    for appeal in result.scalars().all():
+    for appeal in pending:
         action = await db.get(ModerationLog, appeal.original_action_id)
         appellant = await db.get(User, appeal.appellant_id)
         output.append({
@@ -438,6 +454,7 @@ async def get_pending_appeals(
             "appellant_email": appellant.email if appellant else None,
             "original_action": {"action": action.action, "reason": action.reason,
                                 "created_at": action.created_at} if action else None,
+            "original_review": review_context.get(appeal.resource_id) if appeal.resource_type == "review" else None,
         })
     return output
 

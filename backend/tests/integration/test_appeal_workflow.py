@@ -98,6 +98,37 @@ async def test_legacy_removed_review_without_audit_reason_remains_private_histor
 
 
 @pytest.mark.asyncio
+async def test_review_appeal_context_includes_full_quarantined_body(workflow):
+    client, sessions, _, _, _ = workflow
+    review_id = await historical_review(sessions, deleted=False, status="quarantined")
+    body = "Original student feedback.\n" * 100 + "Important final sentence."
+    async with sessions() as db:
+        (await db.get(Review, review_id)).body = body
+        await db.commit()
+    await penalty(sessions, "review", review_id, "quarantined")
+    assert (await submit(client, "review", review_id, 1)).status_code == 201
+    listed = await client.get("/api/v1/moderation/appeals", headers=headers(2))
+    assert listed.json()[0]["original_review"]["body"] == body
+    assert listed.json()[0]["original_review"]["status"] == "quarantined"
+
+
+@pytest.mark.asyncio
+async def test_missing_review_context_does_not_hide_pending_appeal(workflow):
+    client, sessions, _, _, _ = workflow
+    review_id = await historical_review(sessions)
+    await penalty(sessions, "review", review_id, "remove_review")
+    created = await submit(client, "review", review_id, 1)
+    assert created.status_code == 201
+    # Legacy/corrupt missing resources should not make the entire queue fail.
+    async with sessions() as db:
+        await db.delete(await db.get(Review, review_id))
+        await db.commit()
+    listed = await client.get("/api/v1/moderation/appeals", headers=headers(2))
+    assert listed.status_code == 200 and listed.json()[0]["id"] == created.json()["id"]
+    assert listed.json()[0]["original_review"] is None
+
+
+@pytest.mark.asyncio
 async def test_moderators_cannot_list_or_resolve_appeals(workflow):
     client, sessions, _, _, _ = workflow
     old_id = await historical_review(sessions)
@@ -111,6 +142,11 @@ async def test_moderators_cannot_list_or_resolve_appeals(workflow):
     listed = await client.get("/api/v1/moderation/appeals", headers=headers(2))
     assert listed.status_code == 200
     assert listed.json()[0]["original_action"]["action"] == "remove_review"
+    context = listed.json()[0]["original_review"]
+    assert context["id"] == old_id and context["body"] == "Original review retained for history."
+    assert context["rating"] == 2 and context["status"] == "removed"
+    assert context["accommodation_id"] == 1 and context["accommodation_title"] == "Test listing"
+    assert context["created_at"] is not None
     async with sessions() as db:
         assert (await db.get(Appeal, created.json()["id"])).status == "pending"
 
@@ -145,6 +181,8 @@ async def test_upholding_restores_correct_resource_and_audit_type(workflow, kind
     await penalty(sessions, kind, 1, action)
     created = await submit(client, kind, 1, 3)
     assert created.status_code == 201
+    pending = (await client.get("/api/v1/moderation/appeals", headers=headers(2))).json()
+    assert pending[0]["original_review"] is None
     appeal_id = created.json()["id"]
     response = await client.patch(f"/api/v1/moderation/appeals/{appeal_id}/resolve", headers=headers(2),
                                   json={"decision": "upheld", "reason": "Evidence accepted"})
