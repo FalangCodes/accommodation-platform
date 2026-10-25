@@ -1,5 +1,6 @@
 "use client";
 
+import { FlaggedReviewQueue } from "@/components/flagged-review-queue";
 import { ProtectedDocumentLink } from "@/components/protected-document-link";
 
 import { isAxiosError } from "axios";
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  ShieldCheck, Loader2, MapPin, Star, Clock, CheckCircle,
+  ShieldCheck, Loader2, MapPin, Clock, CheckCircle,
   XCircle, Trash2, Eye, AlertTriangle, FileText, MessageSquare, Scale, Flag
 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,18 +52,6 @@ interface PendingListing {
   } | null;
 }
 
-interface FlaggedReview {
-  id: number;
-  accommodation_id: number;
-  student_id: number;
-  rating: number;
-  body: string;
-  created_at: string;
-  nlp?: {
-    sentiment: string;
-    spam_flag: boolean;
-  };
-}
 
 interface PendingLandlord {
   id: number;
@@ -107,10 +96,6 @@ async function fetchSuspendedListings(): Promise<SuspendedListing[]> {
   return data;
 }
 
-async function fetchFlaggedReviews(): Promise<FlaggedReview[]> {
-  const { data } = await api.get("/api/v1/reviews/flagged");
-  return data;
-}
 
 async function fetchPendingLandlords(): Promise<PendingLandlord[]> {
   const { data } = await api.get("/api/v1/landlords/pending-verification");
@@ -171,170 +156,6 @@ function RejectModal({
               disabled={loading || !reason.trim()}
             >
               {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Rejecting...</> : "Reject listing"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-  function FlaggedReviewsTab({
-    onRemove,
-    onRelease,
-  }: {
-    onRemove: (review: FlaggedReview) => void;
-    onRelease: (id: number) => void;
-  }) {  const router = useRouter();
-
-    const { data: flaggedReviews = [], isLoading } = useQuery({
-      queryKey: ["flagged-reviews"],
-      queryFn: fetchFlaggedReviews,
-    });
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-28 w-full rounded-2xl" />
-        ))}
-      </div>
-    );
-  }
-
-  if (flaggedReviews.length === 0) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
-          <CheckCircle className="w-7 h-7 text-emerald-500" />
-        </div>
-        <h3 className="font-semibold text-slate-900 mb-1">No flagged reviews</h3>
-        <p className="text-sm text-slate-500">The NLP pipeline hasn't flagged any reviews as spam.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {flaggedReviews.map((review) => (
-        <div key={review.id} className="bg-white border border-slate-200 rounded-2xl p-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <Badge className="bg-red-50 text-red-700 border-red-200 border rounded-full text-xs px-2 py-0.5">
-                  <AlertTriangle className="w-3 h-3 mr-1" />
-                  Spam flagged
-                </Badge>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-3 h-3 ${i < review.rating ? "fill-amber-400 text-amber-400" : "text-slate-200 fill-slate-200"}`}
-                    />
-                  ))}
-                </div>
-                {review.nlp?.sentiment && (
-                  <span className="text-xs text-slate-500 capitalize">{review.nlp.sentiment}</span>
-                )}
-              </div>
-              <p className="text-sm text-slate-600 leading-relaxed mb-3 line-clamp-3">
-                {review.body}
-              </p>
-              <div className="flex items-center gap-3 text-xs text-slate-400">
-                <span>Review #{review.id}</span>
-                <span>·</span>
-                <span>Listing #{review.accommodation_id}</span>
-                <span>·</span>
-                <span>{new Date(review.created_at).toLocaleDateString("en-ZA", {
-                  day: "numeric", month: "short", year: "numeric"
-                })}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl gap-1.5 text-xs"
-                onClick={() => router.push(`/listings/${review.accommodation_id}`)}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                View listing
-              </Button>
-              <Button
-                size="sm"
-                className="rounded-xl gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => onRelease(review.id)}
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Release
-              </Button>
-              <Button
-                size="sm"
-                className="rounded-xl gap-1.5 text-xs bg-red-500 hover:bg-red-600 text-white"
-                onClick={() => onRemove(review)}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Remove
-              </Button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
-// ─── Remove Review Modal ──────────────────────────────────────────────────────
-
-function RemoveReviewModal({
-  open,
-  onClose,
-  onConfirm,
-  loading,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (reason: string) => void;
-  loading: boolean;
-}) {
-  const [reason, setReason] = useState("");
-
-  return (
-    <Dialog open={open} onOpenChange={() => { if (!loading) { onClose(); setReason(""); } }}>
-      <DialogContent className="rounded-2xl max-w-md bg-white">
-        <DialogHeader>
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-red-50 border border-red-100 mx-auto mb-2">
-            <Trash2 className="w-5 h-5 text-red-500" />
-          </div>
-          <DialogTitle className="text-center">Remove review</DialogTitle>
-          <DialogDescription className="text-center text-sm">
-            This will soft-delete the review and log the moderation action.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div>
-            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-              Reason for removal
-            </label>
-            <Textarea
-              className="rounded-xl resize-none h-28 text-sm"
-              placeholder="e.g. Review violates community guidelines, contains spam..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { onClose(); setReason(""); }} disabled={loading}>
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white"
-              onClick={() => { if (!reason.trim()) { toast.error("Please provide a reason"); return; } onConfirm(reason); }}
-              disabled={loading || !reason.trim()}
-            >
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Removing...</> : "Remove review"}
             </Button>
           </div>
         </div>
@@ -779,7 +600,6 @@ export default function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<"listings" | "reviews" | "landlords" | "suspended" | "appeals">("listings");
   const [rejectTarget, setRejectTarget] = useState<PendingListing | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<FlaggedReview | null>(null);
   const [rejectLandlordTarget, setRejectLandlordTarget] = useState<PendingLandlord | null>(null);
   const [resolveAppealTarget, setResolveAppealTarget] = useState<{ appeal: PendingAppeal, decision: "upheld" | "dismissed" } | null>(null);
   const [reinstateTarget, setReinstateTarget] = useState<SuspendedListing | null>(null);
@@ -821,32 +641,6 @@ export default function AdminPage() {
       toast.error("Failed to reject listing");
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  // ── Remove review ──
-  const handleRemoveReview = async (reason: string) => {
-    if (!removeTarget) return;
-    setActionLoading(true);
-    try {
-      await api.delete(`/api/v1/moderation/reviews/${removeTarget.id}`, { data: { reason } });
-      queryClient.invalidateQueries({ queryKey: ["flagged-reviews"] });
-      toast.success("Review removed.");
-      setRemoveTarget(null);
-    } catch {
-      toast.error("Failed to remove review");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRelease = async (id: number) => {
-    try {
-      await api.patch(`/api/v1/moderation/reviews/${id}/release`);
-      queryClient.invalidateQueries({ queryKey: ["flagged-reviews"] });
-      toast.success("Review released and is now publicly visible.");
-    } catch {
-      toast.error("Failed to release review");
     }
   };
 
@@ -1172,10 +966,7 @@ export default function AdminPage() {
 
         {/* ── Flagged reviews tab ── */}
         {activeTab === "reviews" && (
-          <FlaggedReviewsTab
-            onRemove={(review) => setRemoveTarget(review)}
-            onRelease={(id) => handleRelease(id)}
-          />
+          <FlaggedReviewQueue />
         )}
 
         {activeTab === "landlords" && (
@@ -1206,12 +997,6 @@ export default function AdminPage() {
         loading={actionLoading}
       />
 
-      <RemoveReviewModal
-        open={!!removeTarget}
-        onClose={() => setRemoveTarget(null)}
-        onConfirm={handleRemoveReview}
-        loading={actionLoading}
-      />
 
       <RejectLandlordModal
         open={!!rejectLandlordTarget}

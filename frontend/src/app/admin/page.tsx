@@ -23,6 +23,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FlaggedReviewQueue } from "@/components/flagged-review-queue";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1429,6 +1430,8 @@ function ModerationTab() {
 
   return (
     <div className="space-y-6">
+      <FlaggedReviewQueue />
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
