@@ -18,14 +18,10 @@ interface FlaggedReview {
   created_at: string;
 }
 
-export function FlaggedReviewQueue() {
+function useFlaggedReviews() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [removeTarget, setRemoveTarget] = useState<FlaggedReview | null>(null);
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
   const allowed = user?.role === "admin" || user?.role === "moderator";
-  const { data: reviews = [], isPending, isError, isFetching, refetch } = useQuery({
+  return useQuery({
     queryKey: ["flagged-reviews", user?.id],
     queryFn: async () => (await api.get<FlaggedReview[]>("/api/v1/reviews/flagged")).data,
     enabled: allowed,
@@ -33,6 +29,23 @@ export function FlaggedReviewQueue() {
     refetchOnMount: "always",
     refetchInterval: 30_000,
   });
+}
+
+export function FlaggedReviewCount() {
+  const { data, isError } = useFlaggedReviews();
+  if (isError) return <span title="Flagged review count unavailable" aria-label="Flagged review count unavailable">!</span>;
+  if (!data?.length) return null;
+  return <span aria-label={`${data.length} flagged reviews`} title="Flagged reviews awaiting moderation" className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">{data.length}</span>;
+}
+
+export function FlaggedReviewQueue() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [removeTarget, setRemoveTarget] = useState<FlaggedReview | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const allowed = user?.role === "admin" || user?.role === "moderator";
+  const { data: reviews = [], isPending, isError, isFetching, refetch } = useFlaggedReviews();
 
   async function decide(id: number, action: "release" | "remove") {
     if (busy || (action === "remove" && !reason.trim())) return;

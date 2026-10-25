@@ -23,7 +23,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import { toast } from "sonner";
-import { FlaggedReviewQueue } from "@/components/flagged-review-queue";
+import { FlaggedReviewQueue, FlaggedReviewCount } from "@/components/flagged-review-queue";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1632,6 +1632,7 @@ export default function AdminPage() {
             >
               <Icon className="w-4 h-4" />
               {label}
+              {id === "moderation" && <FlaggedReviewCount />}
             </button>
           ))}
         </div>

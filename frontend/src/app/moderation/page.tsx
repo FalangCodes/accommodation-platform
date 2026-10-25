@@ -1,6 +1,6 @@
 "use client";
 
-import { FlaggedReviewQueue } from "@/components/flagged-review-queue";
+import { FlaggedReviewQueue, FlaggedReviewCount } from "@/components/flagged-review-queue";
 import { ProtectedDocumentLink } from "@/components/protected-document-link";
 
 import { isAxiosError } from "axios";
@@ -787,6 +787,7 @@ export default function AdminPage() {
           >
             <MessageSquare className="w-4 h-4" />
             Flagged reviews
+            <FlaggedReviewCount />
           </button>
 
           <button
