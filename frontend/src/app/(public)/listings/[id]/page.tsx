@@ -467,7 +467,6 @@ function AspectInsightCard({
           ))}
         </div>
       )}
-
       <p className="text-xs text-slate-400 mt-1">
         {mentionCount} student{mentionCount !== 1 ? "s" : ""} mentioned this
       </p>
@@ -1039,13 +1038,12 @@ export default function ListingDetailPage() {
                                       overallOpinion={data.overall_opinion}
                                       summaryGeneratedAt={data.summary_generated_at}
                                       summaryReviewCount={data.summary_review_count}
-                                      topStrengths={data.strengths}
-                                      topConcerns={data.concerns}
+                                      topStrengths={data.strengths ?? []}
+                                      topConcerns={data.concerns ?? []}
                                       mentionCount={data.mention_count}
                                     />
                                   );
                                 })}
-                            
                               {Object.entries(insights.insights).filter(([, data]: [string, any]) => data.show_to_students).length === 0 && (
                                 <p className="text-xs text-slate-400 text-center py-3">
                                   Not enough reviews yet to generate insights. Check back soon.

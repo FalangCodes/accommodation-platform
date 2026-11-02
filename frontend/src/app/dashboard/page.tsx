@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -194,8 +195,21 @@ function CreateListingModal({
       setNewListingId(res.data.id); // ← capture ID
       onSuccess();
       setStep(4); // ← proceed to photo upload step
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Failed to create listing");
+    } catch (err: unknown) {
+      const detail: unknown = isAxiosError(err) ? err.response?.data?.detail : null;
+      if (Array.isArray(detail)) {
+        const messages = detail.flatMap((entry: unknown) => {
+          if (!entry || typeof entry !== "object") return [];
+          const item = entry as { loc?: unknown; msg?: unknown };
+          if (typeof item.msg !== "string") return [];
+          const field = Array.isArray(item.loc) ? item.loc.at(-1) : undefined;
+          const prefix = typeof field === "string" || typeof field === "number" ? `${field}: ` : "";
+          return [`${prefix}${item.msg}`];
+        });
+        toast.error(messages.join(", ") || "Failed to create listing");
+      } else {
+        toast.error(typeof detail === "string" ? detail : "Failed to create listing");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -269,7 +283,7 @@ function CreateListingModal({
                   <option value="bachelor">Bachelor</option>
                   <option value="single_room">Single Room</option>
                   <option value="shared_room">Shared Room</option>
-                  <option value="shared_room">Mixed</option>
+                  <option value="mixed">Mixed</option>
                   <option value="flat">Flat</option>
                   <option value="house">House</option>
                 </select>
@@ -544,8 +558,14 @@ function CreateListingModal({
                 <Button
                   className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
                   onClick={() => {
-                    if (step === 1 && (!form.title || !form.description)) { toast.error("Please fill in title and description"); return; }
-                    if (step === 2 && (!form.address || !form.latitude || !form.longitude)) { toast.error("Please fill in all location fields"); return; }
+                    if (step === 1) {
+                      if (!form.title || form.title.length < 5) { toast.error("Title must be at least 5 characters"); return; }
+                      if (!form.description || form.description.length < 20) { toast.error("Description must be at least 20 characters"); return; }
+                    }
+                    if (step === 2) {
+                      if (!form.address || form.address.length < 5) { toast.error("Address must be at least 5 characters"); return; }
+                      if (!form.latitude || !form.longitude) { toast.error("Please fill in all location fields"); return; }
+                    }
                     setStep(s => s + 1);
                   }}
                 >

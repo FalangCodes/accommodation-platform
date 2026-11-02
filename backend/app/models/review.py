@@ -42,7 +42,7 @@ class ReviewNLPResult(Base):
     sentiment = Column(String, nullable=False)
     sentiment_score = Column(Float, nullable=False)
     aspects = Column(JSONB, nullable=False)
-    aspect_details = Column(JSONB, nullable=True)  # ← add this
+    aspect_details = Column(JSONB, nullable=True)
     spam_flag = Column(Boolean, default=False)
 
     analysed_at = Column(DateTime(timezone=True), server_default=func.now())
