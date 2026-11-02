@@ -1,5 +1,7 @@
 "use client";
 
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -83,13 +85,8 @@ function RegisterForm() {
       await login(email, password);
       toast.success("Account created successfully!");
       router.push(role === "landlord" ? "/dashboard" : "/");
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        setError(detail[0]?.msg ?? "Registration failed");
-      } else {
-        setError(detail ?? "Registration failed");
-      }
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Registration failed"));
     } finally {
       setLoading(false);
     }

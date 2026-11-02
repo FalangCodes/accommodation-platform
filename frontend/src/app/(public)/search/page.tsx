@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import Image from "next/image";
+
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/page-layout";
@@ -8,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -23,7 +25,6 @@ import {
   List,
   Map,
   Star,
-  Wifi,
   ShieldCheck,
   SlidersHorizontal,
   ChevronLeft,
@@ -81,16 +82,6 @@ interface SearchResponse {
   locked_count?: number;
 }
 
-interface MapItem {
-  id: number;
-  title: string;
-  address: string;
-  price_min: number;
-  price_max: number;
-  average_rating?: number;
-  lat?: number;   // ← add
-  lng?: number;   // ← add
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -176,11 +167,9 @@ function StarRating({ rating, count }: { rating?: number; count?: number }) {
 function ListingCard({
   item,
   blurred,
-  index,
 }: {
   item: Accommodation;
   blurred: boolean;
-  index: number;
 }) {
   const router = useRouter();
   const sentiment = item.sentiment_summary
@@ -203,7 +192,7 @@ function ListingCard({
       {/* Image */}
       <div className="relative w-full h-52 overflow-hidden bg-slate-100">
         {item.cover_image ? (
-          <img
+          <Image unoptimized fill sizes="(max-width: 768px) 100vw, 50vw"
             src={imageUrl!}
             alt={item.title}
             className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
@@ -292,7 +281,7 @@ function GuestGateBanner({ returnUrl }: { returnUrl: string }) {
             Sign in to see more listings
           </h3>
           <p className="text-slate-300 text-sm mb-6 max-w-md mx-auto">
-            You're viewing a preview. Create a free account to unlock all listings,
+            You&apos;re viewing a preview. Create a free account to unlock all listings,
             detailed NLP insights, and reviews.
           </p>
           <div className="flex items-center justify-center gap-3">
@@ -473,14 +462,14 @@ function FilterBar({
               Gender policy
             </label>
             <div className="flex gap-2 flex-wrap">
-              {[
+              {([
                 { value: undefined, label: "Any" },
                 { value: "male", label: "Male only" },
                 { value: "female", label: "Female only" },
-              ].map((opt) => (
+              ] as const).map((opt) => (
                 <button
                   key={opt.label}
-                  onClick={() => onChange({ gender_policy: opt.value as any })}
+                  onClick={() => onChange({ gender_policy: opt.value })}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                     filters.gender_policy === opt.value
                       ? "bg-slate-900 text-white border-slate-900"
@@ -499,14 +488,14 @@ function FilterBar({
               Funding type
             </label>
             <div className="flex gap-2 flex-wrap">
-              {[
+              {([
                 { value: undefined, label: "Any" },
                 { value: "self_funded", label: "Self-funded" },
                 { value: "bursary", label: "Bursary/NSFAS" },
-              ].map((opt) => (
+              ] as const).map((opt) => (
                 <button
                   key={opt.label}
-                  onClick={() => onChange({ funding_type: opt.value as any })}
+                  onClick={() => onChange({ funding_type: opt.value })}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                     filters.funding_type === opt.value
                       ? "bg-slate-900 text-white border-slate-900"
@@ -542,7 +531,7 @@ interface Filters {
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading: authLoading, isStudent, isLandlord } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const isGuest = !user;
 
 
@@ -718,7 +707,7 @@ function SearchPageInner() {
               Something went wrong
             </h3>
             <p className="text-slate-500 mb-4">
-              We couldn't load listings right now. Please try again.
+              We couldn&apos;t load listings right now. Please try again.
             </p>
             <Button onClick={handleApplyFilters} variant="outline" className="rounded-xl">
               Retry
@@ -731,7 +720,6 @@ function SearchPageInner() {
           <SearchMap
             items={items}
             isLoading={isLoading}
-            onMarkerClick={(id) => router.push(`/listings/${id}`)}
             university={(() => {
               const u = universities.find(
                 (u) => u.id === appliedFilters.university_id
@@ -780,12 +768,11 @@ function SearchPageInner() {
                     isFetching ? "opacity-60" : "opacity-100"
                   }`}
                 >
-                  {items.map((item, index) => (
+                  {items.map((item) => (
                     <ListingCard
                       key={item.id}
                       item={item}
                       blurred={false}
-                      index={index}
                     />
                   ))}
 

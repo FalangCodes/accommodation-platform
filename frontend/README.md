@@ -30,11 +30,12 @@ For Vercel, use `frontend` as the project root and configure `NEXT_PUBLIC_API_UR
 
 ```bash
 npx tsc --noEmit
-npm run lint
+npx eslint --max-warnings 0
+node --test tests/session.test.mjs
 npm run build
 ```
 
-Full-project lint cleanup remains a separate handover task; do not interpret a successful TypeScript check as a clean lint result. The production build is also distinct from the Webpack development preview.
+Run all four checks: a successful TypeScript check alone does not cover lint, session behaviour or production compilation. The session/error tests mock API responses and need no running backend.
 
 ## Structure
 
@@ -42,5 +43,7 @@ Full-project lint cleanup remains a separate handover task; do not interpret a s
 - `src/components/`: shared layout, forms, maps, report views and UI components.
 - `src/lib/`: API client, authentication/session state and utilities.
 - `public/`: application assets.
+
+Cloud image tiles use Next.js Image with direct, unoptimized URLs to preserve upload delivery and their fixed layout. The full-size lightbox intentionally uses a native image so its natural dimensions preserve the outside-click area.
 
 The retired standalone admin component stubs and unused starter assets have been removed. All role-protected requests remain subject to backend authorization.

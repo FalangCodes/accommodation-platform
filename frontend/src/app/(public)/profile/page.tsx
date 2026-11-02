@@ -1,8 +1,12 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
+
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, type User } from "@/lib/auth-context";
 import { reviewsApi, api } from "@/lib/api";
 import { MyAppeals } from "@/components/my-appeals";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,7 +76,7 @@ interface ModeratorStats {
 
 // ─── Role badge config ────────────────────────────────────────────────────────
 
-const ROLE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+const ROLE_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   student:   { label: "Student",   color: "bg-slate-100 text-slate-700",        icon: GraduationCap },
   landlord:  { label: "Landlord",  color: "bg-blue-50 text-blue-700",            icon: Home },
   moderator: { label: "Moderator", color: "bg-violet-50 text-violet-700",        icon: ShieldCheck },
@@ -88,7 +92,7 @@ const VERIFICATION_COLORS: Record<string, string> = {
 
 // ─── Student profile ──────────────────────────────────────────────────────────
 
-function StudentProfile({ user }: { user: any }) {
+function StudentProfile() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -140,8 +144,8 @@ function StudentProfile({ user }: { user: any }) {
       toast.success("Appeal submitted. An administrator will review it shortly.");
       setAppealTarget(null);
       setAppealReason("");
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? "Failed to submit appeal.";
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, "Failed to submit appeal.");
       toast.error(msg);
     } finally {
       setAppealing(false);
@@ -273,7 +277,7 @@ function StudentProfile({ user }: { user: any }) {
             </div>
             <DialogTitle className="text-center">Delete this review?</DialogTitle>
             <DialogDescription className="text-center text-sm">
-              You won't be able to re-review this accommodation for <strong>14 days</strong>.
+              You won&apos;t be able to re-review this accommodation for <strong>14 days</strong>.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 mt-2">
@@ -328,7 +332,7 @@ function StudentProfile({ user }: { user: any }) {
 
 // ─── Landlord profile ─────────────────────────────────────────────────────────
 
-function LandlordProfile({ user }: { user: any }) {
+function LandlordProfile() {
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -347,7 +351,7 @@ function LandlordProfile({ user }: { user: any }) {
   const [appealReason, setAppealReason] = useState("");
   const [appealing, setAppealing] = useState(false);
 
-  const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+  const STATUS_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon }> = {
     approved: { label: "Live",     color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
     pending:  { label: "Pending",  color: "bg-amber-50 text-amber-700 border-amber-200",       icon: Clock },
     rejected: { label: "Rejected", color: "bg-red-50 text-red-700 border-red-200",             icon: XCircle },
@@ -370,8 +374,8 @@ function LandlordProfile({ user }: { user: any }) {
       toast.success("Appeal submitted. An administrator will review it shortly.");
       setAppealTarget(null);
       setAppealReason("");
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? "Failed to submit appeal.";
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, "Failed to submit appeal.");
       toast.error(msg);
     } finally {
       setAppealing(false);
@@ -474,7 +478,7 @@ function LandlordProfile({ user }: { user: any }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {listings.map((listing: any) => {
+            {listings.map((listing: LandlordListing) => {
               const cfg = STATUS_CONFIG[listing.status] ?? STATUS_CONFIG.pending;
               const Icon = cfg.icon;
               return (
@@ -562,7 +566,7 @@ function LandlordProfile({ user }: { user: any }) {
 
 // ─── Moderator/Admin profile ──────────────────────────────────────────────────
 
-function ModeratorProfile({ user }: { user: any }) {
+function ModeratorProfile({ user }: { user: User }) {
   const router = useRouter();
   const { isAdmin } = useAuth();
 
@@ -672,7 +676,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/profile");
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   if (loading) {
     return (
@@ -729,8 +733,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Role-specific content */}
-          {isStudent && <StudentProfile user={user} />}
-          {isLandlord && <LandlordProfile user={user} />}
+          {isStudent && <StudentProfile />}
+          {isLandlord && <LandlordProfile />}
           {(isModerator || isAdmin) && <ModeratorProfile user={user} />}
           {(isStudent || isLandlord) && <MyAppeals />}
         </div>

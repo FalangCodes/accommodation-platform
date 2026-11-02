@@ -5,7 +5,7 @@ import { authApi } from "./api";
 import { SESSION_ENDED_EVENT } from "./session";
 import { useQueryClient } from "@tanstack/react-query";
 
-interface User {
+export interface User {
   id: number;
   email: string;
   role: string;

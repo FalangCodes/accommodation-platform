@@ -20,7 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   ShieldCheck, Loader2, MapPin, Clock, CheckCircle,
-  XCircle, Trash2, Eye, AlertTriangle, FileText, MessageSquare, Scale, Flag
+  XCircle, Trash2, Eye, AlertTriangle, FileText, MessageSquare, Scale,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -178,7 +178,6 @@ function LandlordVerificationTab({
     queryFn: fetchPendingLandlords,
   });
 
-  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -619,7 +618,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/moderation");
     if (!loading && user && (isStudent || isLandlord)) router.push("/");
-  }, [user, loading]);
+  }, [user, loading, isStudent, isLandlord, router]);
 
   const { data: pendingListings = [], isLoading: listingsLoading } = useQuery({
     queryKey: ["pending-listings"],
@@ -1039,7 +1038,7 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle>Reinstate listing</DialogTitle>
             <DialogDescription>
-              Are you sure you want to restore "{reinstateTarget?.title}"? It will become publicly visible again immediately.
+              Are you sure you want to restore &quot;{reinstateTarget?.title}&quot;? It will become publicly visible again immediately.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 mt-2">

@@ -1,5 +1,9 @@
 "use client";
 
+import Image from "next/image";
+
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { useState, useRef } from "react";
 import { accommodationsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -63,8 +67,8 @@ export default function ImageUploader({
         const res = await accommodationsApi.uploadImage(accommodationId, file);
         setImages((prev) => [...prev, res.data]);
         successCount++;
-      } catch (err: any) {
-        toast.error(err?.response?.data?.detail ?? `Failed to upload ${file.name}`);
+      } catch (err: unknown) {
+        toast.error(getApiErrorMessage(err, `Failed to upload ${file.name}`));
       }
     }
 
@@ -144,7 +148,7 @@ export default function ImageUploader({
               key={img.id}
               className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100"
             >
-              <img
+              <Image unoptimized fill sizes="(max-width: 768px) 100vw, 50vw"
                 src={img.url}
                 alt={`Photo ${index + 1}`}
                 className="w-full h-full object-cover"

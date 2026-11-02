@@ -1,5 +1,11 @@
 "use client";
 
+import type { AccommodationInsights } from "@/lib/insights";
+
+import type { LucideIcon } from "lucide-react";
+
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { useState, useEffect, useRef } from "react";
 import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
@@ -18,12 +24,11 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, MapPin, Star, TrendingUp, Eye, ChevronRight,
+  Plus, MapPin, Star, TrendingUp, Eye,
   Loader2, Home, CheckCircle, Clock, XCircle,
   Wifi, ShieldCheck, Zap, Wrench, Volume2, DollarSign, User,
   BarChart2, ArrowLeft,
-} 
-from "lucide-react";
+} from "lucide-react";
 import { toast } from "sonner";
 import { ImagePlus, FileText } from "lucide-react";
 
@@ -65,14 +70,14 @@ interface LandlordProfile {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, any> = {
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   incomplete: { label: "Missing Document", color: "bg-slate-50 text-slate-700 border-slate-200", icon: FileText },
   pending:  { label: "Pending review",  color: "bg-amber-50 text-amber-700 border-amber-200",   icon: Clock },
   approved: { label: "Live",            color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
   rejected: { label: "Rejected",        color: "bg-red-50 text-red-700 border-red-200",          icon: XCircle },
 };
 
-const ASPECT_ICONS: Record<string, any> = {
+const ASPECT_ICONS: Record<string, LucideIcon> = {
   "cleanliness": ShieldCheck,
   "safety": ShieldCheck,
   "noise levels": Volume2,
@@ -83,16 +88,6 @@ const ASPECT_ICONS: Record<string, any> = {
   "value for money": DollarSign,
 };
 
-const ASPECT_LABELS: Record<string, string> = {
-  "cleanliness": "Cleanliness",
-  "safety": "Safety",
-  "noise levels": "Noise Levels",
-  "landlord responsiveness": "Landlord",
-  "wifi and internet": "WiFi",
-  "water and electricity": "Utilities",
-  "maintenance and repairs": "Maintenance",
-  "value for money": "Value",
-};
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
@@ -431,7 +426,7 @@ function CreateListingModal({
                         const updated = current.includes(amenity.value)
                           ? current.filter((a) => a !== amenity.value)
                           : [...current, amenity.value];
-                        update("amenities", updated as any);
+                        update("amenities", updated);
                       }}
                       className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                         (form.amenities ?? []).includes(amenity.value)
@@ -485,8 +480,8 @@ function CreateListingModal({
                       await accommodationsApi.uploadOwnershipDoc(newListingId, file);
                       setOwnershipUploaded(true);
                       toast.success("Ownership document uploaded");
-                    } catch (err: any) {
-                      toast.error(err?.response?.data?.detail ?? "Upload failed");
+                    } catch (err: unknown) {
+                      toast.error(getApiErrorMessage(err, "Upload failed"));
                     } finally {
                       setUploadingOwnership(false);
                     }
@@ -597,7 +592,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
     queryFn: () => fetchAnalytics(listing.id),
   });
 
-  const { data: insights } = useQuery({
+  const { data: insights } = useQuery<AccommodationInsights>({
   queryKey: ["listing-insights", listing.id],
   queryFn: () => api.get(`/api/v1/accommodations/${listing.id}/insights`).then(r => r.data),
 });
@@ -687,7 +682,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
     <p className="mb-4 text-xs text-slate-500">Figures reflect current published reviews. Written summaries refresh every two weeks.</p>
     {/* Aspect breakdown */}
     <div className="space-y-3 mb-6">
-      {Object.entries(insights.insights).map(([aspect, data]: [string, any]) => {
+      {Object.entries(insights.insights).map(([aspect, data]) => {
         const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
         const isPositive = (data.overall_sentiment ?? "").includes("positive");
         const isNegative = (data.overall_sentiment ?? "").includes("negative");
@@ -727,7 +722,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
 
             {/* Opinion */}
             {data.overall_opinion && (
-              <p className="text-xs text-slate-500 italic mb-2">"{data.overall_opinion}"</p>
+              <p className="text-xs text-slate-500 italic mb-2">&quot;{data.overall_opinion}&quot;</p>
             )}
             <SummaryUpdated generatedAt={data.summary_generated_at} reviewCount={data.summary_review_count} />
 
@@ -774,7 +769,7 @@ function AnalyticsPanel({ listing, onBack }: { listing: Listing; onBack: () => v
           Recommendations
         </h4>
         <div className="space-y-3">
-          {(insights.recommendations ?? []).map((rec: any, i: number) => (
+          {(insights.recommendations ?? []).map((rec, i) => (
             <div
               key={i}
               className={`rounded-xl p-3 border ${
@@ -843,8 +838,8 @@ function VerificationBanner({
       });
       toast.success(`${type === "id-copy" ? "ID copy" : "Proof of address"} uploaded successfully`);
       onUploadSuccess();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Upload failed");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Upload failed"));
     } finally {
       setLoading(false);
     }
@@ -856,8 +851,8 @@ function VerificationBanner({
       await api.post("/api/v1/landlords/me/verification/submit");
       toast.success("Verification submitted! An admin will review your documents shortly.");
       onUploadSuccess();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Submission failed");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Submission failed"));
     } finally {
       setSubmitting(false);
     }
@@ -1010,8 +1005,8 @@ function OwnershipDocUploader({ accommodationId, onSuccess }: { accommodationId:
       await accommodationsApi.uploadOwnershipDoc(accommodationId, file);
       setUploaded(true);
       setTimeout(onSuccess, 1000);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Upload failed");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Upload failed"));
     } finally {
       setUploading(false);
     }
@@ -1072,7 +1067,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/dashboard");
     if (!loading && user && !isLandlord) router.push("/");
-  }, [user, loading]);
+  }, [user, loading, isLandlord, router]);
 
   const { data: listings = [], isLoading } = useQuery({
     queryKey: ["my-listings"],

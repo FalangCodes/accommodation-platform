@@ -1,11 +1,15 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
+
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi, reportsApi, moderationApi } from "@/lib/api";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { FileText, RefreshCw, Calendar } from "lucide-react";
 import PageLayout from "@/components/page-layout";
 import { ManagementReport, ReportDownloadButton, type ManagementDocument } from "@/components/management-report";
@@ -17,9 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   ShieldCheck, Loader2, Users, Home, Star, Eye, TrendingUp,
-  Building2, ChevronDown, ChevronRight, MapPin, Globe,
-  CheckCircle, XCircle, Clock, AlertTriangle, Plus,
-  GraduationCap, UserCheck, UserX, BarChart2, Activity,
+  Building2, ChevronDown, ChevronRight, MapPin, XCircle, Clock, Plus,
+  GraduationCap, BarChart2, Activity,
   ChevronLeft,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -123,7 +126,7 @@ interface ReportDetail {
   status: string;
   entity_id: number | null;
   entity_name?: string | null;
-  metrics: Record<string, { key: string; label: string; value: number; breakdown: Record<string, any> | null }[]>;
+  metrics: Record<string, { key: string; label: string; value: number; breakdown: Record<string, unknown> | null }[]>;
 }
 
 interface ModerationLogEntry {
@@ -160,7 +163,7 @@ interface ModerationLogResponse {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatCard({ label, value, icon: Icon, sub }: { label: string; value: string | number; icon: any; sub?: string }) {
+function StatCard({ label, value, icon: Icon, sub }: { label: string; value: string | number; icon: LucideIcon; sub?: string }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-2">
@@ -310,8 +313,8 @@ function UniversitiesTab() {
       queryClient.invalidateQueries({ queryKey: ["admin-universities-tree"] });
       setAddOpen(false);
       setForm({ name: "", domain: "", province: "", lat: "", lng: "" });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Failed to add university");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to add university"));
     } finally {
       setSubmitting(false);
     }
@@ -544,8 +547,8 @@ function UserManagementTab() {
       queryClient.invalidateQueries({ queryKey: ["admin-moderators"] });
       setCreateModOpen(false);
       setModForm({ email: "", password: "" });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Failed to create moderator");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to create moderator"));
     } finally {
       setSubmitting(false);
     }
@@ -843,7 +846,7 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-const CATEGORY_ICONS: Record<string, any> = {
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
   traffic: Eye,
   users: Users,
   listings: Building2,
@@ -853,7 +856,7 @@ const CATEGORY_ICONS: Record<string, any> = {
   moderation: Activity,
 };
 
-function MetricCard({ label, value, breakdown }: { label: string; value: number; breakdown?: Record<string, any> | null }) {
+function MetricCard({ label, value, breakdown }: { label: string; value: number; breakdown?: Record<string, unknown> | null }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4">
       <p className="text-xs text-slate-400 mb-1">{label}</p>
@@ -1103,8 +1106,8 @@ function ReportsTab() {
       });
       toast.success("Platform summary report generated");
       queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to generate report"));
     } finally {
       setGenerating(false);
     }
@@ -1121,8 +1124,8 @@ function ReportsTab() {
     });
     toast.success("Accommodation report generated");
     queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
-  } catch (err: any) {
-    toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, "Failed to generate report"));
   } finally {
     setGenerating(false);
   }
@@ -1139,8 +1142,8 @@ function ReportsTab() {
       });
       toast.success("University report generated");
       queryClient.invalidateQueries({ queryKey: ["admin-reports"] });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to generate report"));
     } finally {
       setGenerating(false);
     }
@@ -1233,7 +1236,7 @@ function ReportsTab() {
           <FileText className="w-8 h-8 text-slate-200 mx-auto mb-3" />
           {searchQuery.trim() ? (
             <>
-              <p className="text-sm text-slate-400">No reports match "{searchQuery}"</p>
+              <p className="text-sm text-slate-400">No reports match &quot;{searchQuery}&quot;</p>
               <button
                 onClick={() => setSearchQuery("")}
                 className="text-xs text-slate-400 hover:text-slate-600 underline mt-2"
@@ -1244,7 +1247,7 @@ function ReportsTab() {
           ) : (
             <>
               <p className="text-sm text-slate-400">No reports generated yet.</p>
-              <p className="text-xs text-slate-300 mt-1">Click "Generate platform report" to create the first one.</p>
+              <p className="text-xs text-slate-300 mt-1">Click &quot;Generate platform report&quot; to create the first one.</p>
             </>
           )}
         </div>
@@ -1582,7 +1585,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/admin");
     if (!loading && user && !isAdmin) router.push("/");
-  }, [user, loading]);
+  }, [user, loading, isAdmin, router]);
 
   if (loading) {
     return (

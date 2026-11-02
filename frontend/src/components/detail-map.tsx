@@ -10,13 +10,13 @@ interface DetailMapProps {
 
 export default function DetailMap({ lat, lng, title }: DetailMapProps) {
   useEffect(() => {
-    let map: any = null;
+    let map: import("leaflet").Map | null = null;
 
     const init = async () => {
       const L = (await import("leaflet")).default;
       await import("leaflet/dist/leaflet.css");
 
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: () => string })._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
         iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
@@ -24,7 +24,7 @@ export default function DetailMap({ lat, lng, title }: DetailMapProps) {
       });
 
       const container = document.getElementById("detail-map");
-      if (!container || (container as any)._leaflet_id) return;
+      if (!container || (container as HTMLElement & { _leaflet_id?: number })._leaflet_id) return;
 
       map = L.map("detail-map").setView([lat, lng], 15);
 

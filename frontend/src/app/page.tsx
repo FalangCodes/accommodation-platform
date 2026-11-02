@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -99,7 +101,8 @@ export default function Home() {
       <section className="relative flex items-center w-full min-h-[680px] px-5 lg:px-20 py-16 lg:py-0">
         {/* Background photo with dark blue overlay */}
         <div aria-hidden className="absolute inset-0 pointer-events-none">
-          <img
+          <Image unoptimized fill sizes="(max-width: 768px) 100vw, 50vw"
+            loading="eager"
             src="/hero-campus.jpg"
             alt=""
             className="absolute inset-0 w-full h-full object-cover object-center"
@@ -280,7 +283,7 @@ export default function Home() {
                   {/* Image or gradient placeholder */}
                   <div className="relative h-52 w-full shrink-0 overflow-hidden">
                     {listing.first_image_url ? (
-                      <img
+                      <Image unoptimized fill sizes="(max-width: 768px) 100vw, 50vw"
                         src={listing.first_image_url}
                         alt={listing.title}
                         className="absolute inset-0 w-full h-full object-cover"

@@ -1,5 +1,11 @@
 "use client";
 
+import Image from "next/image";
+
+import type { AccommodationInsights } from "@/lib/insights";
+
+import type { LucideIcon } from "lucide-react";
+
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -106,7 +112,7 @@ interface Review {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ASPECT_ICONS: Record<string, any> = {
+const ASPECT_ICONS: Record<string, LucideIcon> = {
   "cleanliness": ShieldCheck,
   "safety": ShieldCheck,
   "noise levels": Volume2,
@@ -117,16 +123,6 @@ const ASPECT_ICONS: Record<string, any> = {
   "value for money": DollarSign,
 };
 
-const ASPECT_LABELS: Record<string, string> = {
-  "cleanliness": "Cleanliness",
-  "safety": "Safety",
-  "noise levels": "Noise Levels",
-  "landlord responsiveness": "Landlord",
-  "wifi and internet": "WiFi",
-  "water and electricity": "Utilities",
-  "maintenance and repairs": "Maintenance",
-  "value for money": "Value",
-};
 
 const SENTIMENT_STYLES = {
   positive: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -401,11 +397,11 @@ function AspectInsightCard({
   mentionCount,
 }: {
   displayName: string;
-  icon: any;
+  icon: LucideIcon;
   sentimentLabel: string;
   starRating: number;
   overallOpinion: string;
-  summaryGeneratedAt?: string;
+  summaryGeneratedAt?: string | null;
   summaryReviewCount?: number;
   topStrengths: string[];
   topConcerns: string[];
@@ -440,7 +436,7 @@ function AspectInsightCard({
 
       {/* Overall opinion */}
       <p className="text-xs text-slate-600 leading-relaxed mb-2 italic">
-        "{overallOpinion}"
+        &quot;{overallOpinion}&quot;
       </p>
       <SummaryUpdated generatedAt={summaryGeneratedAt} reviewCount={summaryReviewCount} />
 
@@ -531,7 +527,7 @@ function PhotoGrid({ images }: { images: { url: string }[] }) {
           onClick={() => images.length > 0 && setLightbox(0)}
         >
           {images[0] ? (
-            <img src={images[0].url} alt="Main" className="w-full h-full object-cover group-hover:brightness-95 transition" />
+            <Image unoptimized fill loading="eager" sizes="(max-width: 768px) 100vw, 50vw" src={images[0].url} alt="Main" className="w-full h-full object-cover group-hover:brightness-95 transition" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
               <Home className="w-16 h-16 text-slate-300" />
@@ -542,7 +538,7 @@ function PhotoGrid({ images }: { images: { url: string }[] }) {
           <div key={i} className="relative cursor-pointer group bg-slate-100" onClick={() => images[i] && setLightbox(i)}>
             {images[i] ? (
               <>
-                <img src={images[i].url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover group-hover:brightness-95 transition" />
+                <Image unoptimized fill sizes="(max-width: 768px) 100vw, 50vw" src={images[i].url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover group-hover:brightness-95 transition" />
                 {i === 3 && images.length > 5 && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                     <span className="text-white font-semibold text-sm">+{images.length - 5} more</span>
@@ -559,6 +555,8 @@ function PhotoGrid({ images }: { images: { url: string }[] }) {
       </div>
       {lightbox !== null && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          {/* Natural dimensions preserve the lightbox click-outside area. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={images[lightbox].url} alt="Full size" className="max-w-full max-h-full rounded-xl object-contain" onClick={(e) => e.stopPropagation()} />
           <button className="absolute top-4 right-4 text-white text-2xl font-bold" onClick={() => setLightbox(null)}>✕</button>
         </div>
@@ -673,7 +671,7 @@ export default function ListingDetailPage() {
     }
   };
 
-  const { data: insights } = useQuery({
+  const { data: insights } = useQuery<AccommodationInsights>({
     queryKey: ["listing-insights", id, user?.id ?? "guest"],
     queryFn: async () => {
       const { data } = await api.get(`/api/v1/accommodations/${id}/insights`);
@@ -1025,8 +1023,8 @@ export default function ListingDetailPage() {
                             <div className="space-y-2">
                               <p className="text-xs text-slate-500">Figures reflect current published reviews. Written summaries refresh every two weeks.</p>
                               {Object.entries(insights.insights)
-                                .filter(([, data]: [string, any]) => data.show_to_students)
-                                .map(([aspect, data]: [string, any]) => {
+                                .filter(([, data]) => data.show_to_students)
+                                .map(([aspect, data]) => {
                                   const Icon = ASPECT_ICONS[aspect] ?? ShieldCheck;
                                   return (
                                     <AspectInsightCard
@@ -1044,7 +1042,7 @@ export default function ListingDetailPage() {
                                     />
                                   );
                                 })}
-                              {Object.entries(insights.insights).filter(([, data]: [string, any]) => data.show_to_students).length === 0 && (
+                              {Object.entries(insights.insights).filter(([, data]) => data.show_to_students).length === 0 && (
                                 <p className="text-xs text-slate-400 text-center py-3">
                                   Not enough reviews yet to generate insights. Check back soon.
                                 </p>
@@ -1140,7 +1138,7 @@ export default function ListingDetailPage() {
           <DialogHeader>
             <DialogTitle>Suspend Listing</DialogTitle>
             <DialogDescription>
-              Temporarily hide this listing from students while it's investigated.
+              Temporarily hide this listing from students while it&apos;s investigated.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">

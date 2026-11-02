@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Button } from "@/components/ui/button";
+
 import Link from "next/link";
 
 // Fix Leaflet default icon issue with Next.js
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: () => string })._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
   iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
@@ -70,7 +70,6 @@ interface UniversityPin {
 interface SearchMapProps {
   items: MapItem[];
   isLoading: boolean;
-  onMarkerClick: (id: number) => void;
   university?: UniversityPin | null;
 }
 
@@ -96,7 +95,7 @@ function FitBounds({ items, university }: { items: MapItem[]; university?: Unive
   return null;
 }
 
-export default function SearchMap({ items, isLoading, onMarkerClick, university }: SearchMapProps) {
+export default function SearchMap({ items, isLoading, university }: SearchMapProps) {
   const validItems = items.filter(
     (i) => i.lat !== undefined && i.lng !== undefined && i.lat !== 0 && i.lng !== 0
   );
@@ -198,4 +197,4 @@ export default function SearchMap({ items, isLoading, onMarkerClick, university 
       </MapContainer>
     </div>
   );
-}
+}

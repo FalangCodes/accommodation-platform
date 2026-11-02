@@ -172,11 +172,12 @@ Frontend checks, from `frontend/`:
 
 ```bash
 npx tsc --noEmit
-npm run lint
+npx eslint --max-warnings 0
+node --test tests/session.test.mjs
 npm run build
 ```
 
-TypeScript and targeted browser scenarios have been checked during development. A clean full-project lint result is still a remaining handover task; the two known backend dependency deprecation warnings do not currently fail tests. Migration-body checks are separate from an end-to-end deployment rehearsal.
+Frontend verification covers strict lint, TypeScript, mocked session/error tests, production builds and targeted browser scenarios. The two known backend dependency deprecation warnings do not currently fail tests. Migration-body checks are separate from an end-to-end deployment rehearsal.
 
 ## Existing Azure / Vercel deployment
 

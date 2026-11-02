@@ -1,5 +1,11 @@
 "use client";
 
+import Image from "next/image";
+
+import type { LucideIcon } from "lucide-react";
+
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { ProtectedDocumentLink } from "@/components/protected-document-link";
 
 import { useParams, useRouter } from "next/navigation";
@@ -19,13 +25,23 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  ArrowLeft, MapPin, Star, Eye, Home, User, Phone, Globe,
-  Calendar, CheckCircle, XCircle, Clock, FileText, Loader2,
-  Wifi, ShieldCheck, Zap, Wrench, Volume2, DollarSign, AlertTriangle,
+  ArrowLeft, MapPin, Star, Eye, User, Phone, Globe, CheckCircle, XCircle, Clock, FileText, Loader2, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface AdminLandlord {
+  landlord_id: number;
+  display_name: string;
+  email: string;
+  contact_phone?: string | null;
+  website?: string | null;
+  verification_status: string;
+  id_number?: string | null;
+  id_copy_url?: string | null;
+  proof_of_address_url?: string | null;
+}
 
 interface AccommodationDetail {
   id: number;
@@ -54,7 +70,7 @@ interface AccommodationDetail {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   approved: { label: "Live", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle },
   pending:  { label: "Pending review", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
   rejected: { label: "Rejected", color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
@@ -88,7 +104,7 @@ export default function AdminAccommodationDetailPage() {
   useEffect(() => {
     if (!loading && !user) router.push("/login?redirect=/admin");
     if (!loading && user && !isAdmin) router.push("/");
-  }, [user, loading]);
+  }, [user, loading, isAdmin, router]);
 
   // Fetch accommodation detail
   const { data: listing, isLoading: listingLoading, isError } = useQuery({
@@ -107,7 +123,7 @@ export default function AdminAccommodationDetailPage() {
     queryKey: ["admin-landlord-detail", listing?.landlord_id],
     queryFn: async () => {
       const { data } = await api.get("/api/v1/admin/users/landlords");
-      return data.find((l: any) => l.landlord_id === listing?.landlord_id);
+      return data.find((l: AdminLandlord) => l.landlord_id === listing?.landlord_id);
     },
     enabled: !!listing?.landlord_id,
   });
@@ -173,8 +189,8 @@ const handleGenerateReport = async () => {
     });
     toast.success("Accommodation report generated");
     queryClient.invalidateQueries({ queryKey: ["accommodation-trend", id] }); // ← add this
-  } catch (err: any) {
-    toast.error(err?.response?.data?.detail ?? "Failed to generate report");
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, "Failed to generate report"));
   } finally {
     setGeneratingReport(false);
   }
@@ -292,8 +308,8 @@ const handleGenerateReport = async () => {
 
                 {/* Cover image */}
                 {listing.images.length > 0 && (
-                  <div className="w-full h-64 rounded-2xl overflow-hidden">
-                    <img
+                  <div className="relative w-full h-64 rounded-2xl overflow-hidden">
+                    <Image unoptimized fill sizes="(max-width: 768px) 100vw, 50vw"
                       src={listing.images[0].url}
                       alt={listing.title}
                       className="w-full h-full object-cover"

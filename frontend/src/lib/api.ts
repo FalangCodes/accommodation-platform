@@ -123,7 +123,7 @@ export const accommodationsApi = {
 
   get: (id: number) => api.get(`/api/v1/accommodations/${id}`),
 
-  create: (data: any) => api.post("/api/v1/accommodations", data),
+  create: (data: Record<string, string | number | string[] | null>) => api.post("/api/v1/accommodations", data),
 
   analytics: (id: number) => api.get(`/api/v1/accommodations/${id}/analytics`),
 

@@ -13,11 +13,11 @@ function load(file, mocks = {}) {
   const code = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true,
   } }).outputText;
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   new Function("require", "module", "exports", code)(
-    (name) => mocks[name] ?? require(name), module, module.exports,
+    (name) => mocks[name] ?? require(name), loadedModule, loadedModule.exports,
   );
-  return module.exports;
+  return loadedModule.exports;
 }
 
 function browser(path = "/dashboard") {
@@ -167,3 +167,26 @@ for (const status of [429, 503]) {
     } finally { axios.defaults.adapter = previous; }
   });
 }
+
+
+test("API errors preserve text and format validation messages", () => {
+  const { getApiErrorMessage } = load("api-error");
+  const error = (detail) => new axios.AxiosError("Rejected", "ERR_BAD_REQUEST", undefined, undefined, {
+    data: { detail }, status: 422, statusText: "Rejected", headers: {}, config: {},
+  });
+  assert.equal(getApiErrorMessage(error("Upload failed"), "Fallback"), "Upload failed");
+  assert.equal(getApiErrorMessage(error([{ msg: "Title is short" }, { msg: "Address is short" }]), "Fallback"),
+    "Title is short; Address is short");
+});
+
+test("API errors use safe fallback for absent or malformed payloads", () => {
+  const { getApiErrorMessage } = load("api-error");
+  for (const detail of [null, {}, [{ msg: {} }], [null], ""]) {
+    const error = new axios.AxiosError("Rejected", "ERR_BAD_REQUEST", undefined, undefined, {
+      data: { detail }, status: 422, statusText: "Rejected", headers: {}, config: {},
+    });
+    assert.equal(getApiErrorMessage(error, "Fallback"), "Fallback");
+  }
+  assert.equal(getApiErrorMessage(new Error("Network error"), "Fallback"), "Fallback");
+  assert.equal(getApiErrorMessage(null, "Fallback"), "Fallback");
+});
