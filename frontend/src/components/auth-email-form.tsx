@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AxiosError } from "axios";
 import { authApi } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -19,6 +19,7 @@ type VerificationResult =
 
 function EmailForm({ mode }: { mode: Mode }) {
   const { clearSession } = useAuth();
+  const router = useRouter();
   const search = useSearchParams();
   const [email, setEmail] = useState(search.get("email") || "");
   const [password, setPassword] = useState("");
@@ -57,12 +58,13 @@ function EmailForm({ mode }: { mode: Mode }) {
         setMessage(result.message);
         setComplete(true);
         window.history.replaceState(null, "", window.location.pathname);
+        router.replace("/login?verified=1");
       } else if (result.kind === "failed") {
         setError(result.message);
       }
     });
     return () => { active = false; };
-  }, [mode]);
+  }, [mode, router]);
 
   async function perform(action: "resend" | "forgot" | "reset") {
     setError("");
@@ -141,7 +143,13 @@ function EmailForm({ mode }: { mode: Mode }) {
           </form>
         )}
         {mode === "reset" && !complete && <Link href="/forgot-password" className="block mt-4 text-sm text-[#1F4E79] hover:underline">Request a new reset link</Link>}
-        {!(complete && mode === "verify") && <Link href="/login" className="block mt-6 text-sm text-center text-[#1F4E79] hover:underline">Back to sign in</Link>}
+        {mode === "verify" && !checking && !complete && (
+          <div className="mt-6 border-t border-gray-100 pt-5">
+            <p className="mb-3 text-sm text-gray-600">Already verified your email? Sign in to continue.</p>
+            <Button asChild className="w-full bg-[#1F4E79] text-white"><Link href="/login">Sign in</Link></Button>
+          </div>
+        )}
+        {mode !== "verify" && <Link href="/login" className="block mt-6 text-sm text-center text-[#1F4E79] hover:underline">Back to sign in</Link>}
       </main>
     </div>
   );

@@ -80,9 +80,11 @@ Use dedicated test accounts and disposable test passwords.
    your email page, no automatic login, and a verification email.
 2. Attempt login before verification. Expect a verification-required error.
 3. Open the email link. Expect automatic verification without entering an email
-   or pressing a verification button, followed by confirmation and a **Sign in**
-   button. Reusing the same link must fail. Missing/expired links show the resend
-   form; temporary failures offer a manual retry.
+   or pressing a verification button, followed by a redirect to sign in with a
+   verification confirmation. Refreshing must keep the sign-in form visible,
+   without consuming the token again. Reusing the same link must fail.
+   Missing/expired links show a resend form and a prominent **Sign in** link;
+   temporary failures offer a manual retry.
 4. Request another verification email twice within a minute. At most one new
    email should be sent. At most three emails per account and purpose are issued
    per hour; a newly issued link replaces the previous link.

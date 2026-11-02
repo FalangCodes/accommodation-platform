@@ -57,6 +57,12 @@ function LoginForm() {
         </p>
       </div>
 
+      {searchParams.get("verified") === "1" && (
+        <p role="status" className="mb-4 px-4 py-3 bg-green-50 border border-green-100 rounded-xl text-sm text-green-800">
+          Email verified successfully. Sign in to continue.
+        </p>
+      )}
+
       {(error || sessionMessage) && (
         <div role="alert" className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
           {error || sessionMessage}
