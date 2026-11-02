@@ -1,37 +1,17 @@
-import asyncio
+"""Retired destructive reset entry point. Database changes use Alembic."""
 import sys
-import os
 
-# Fix import paths
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from sqlalchemy import text
-from app.db.base import engine, Base
+def main():
+    print(
+        "Database reset is disabled. No database connection was opened.\n"
+        "For a new installation, run from the project root:\n"
+        "  docker compose run --rm --no-deps backend alembic upgrade head\n"
+        "Existing data must be preserved; this command never drops tables.",
+        file=sys.stderr,
+    )
+    return 2
 
-# We MUST import all models here so SQLAlchemy knows what to build
-from app.models.user import User
-from app.models.student import Student
-from app.models.landlord import Landlord
-from app.models.university import University
-from app.models.accommodation import Accommodation, AccommodationView, AccommodationImage
-from app.models.review import Review, ReviewNLPResult, ReviewReply
-from app.models.moderation import ModerationLog, Appeal
-
-async def force_build_database():
-    async with engine.begin() as conn:
-        # 1. Guarantee PostGIS is active for your geographic columns
-        print("Enabling PostGIS extension...")
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-        
-        # 2. Wipe the slate completely clean
-        print("Dropping old schema (if any)...")
-        await conn.run_sync(Base.metadata.drop_all)
-        
-        # 3. Force-build every single table
-        print("Building all tables directly from models...")
-        await conn.run_sync(Base.metadata.create_all)
-        
-    print("Database foundation successfully built! 🏗️")
 
 if __name__ == "__main__":
-    asyncio.run(force_build_database())
+    raise SystemExit(main())
