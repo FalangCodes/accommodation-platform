@@ -79,8 +79,10 @@ Use dedicated test accounts and disposable test passwords.
 1. Register a student using a recognised institutional mailbox. Expect a check
    your email page, no automatic login, and a verification email.
 2. Attempt login before verification. Expect a verification-required error.
-3. Open the email link and select **Verify email**. Expect confirmation, then
-   successful login. Reusing the same link must fail.
+3. Open the email link. Expect automatic verification without entering an email
+   or pressing a verification button, followed by confirmation and a **Sign in**
+   button. Reusing the same link must fail. Missing/expired links show the resend
+   form; temporary failures offer a manual retry.
 4. Request another verification email twice within a minute. At most one new
    email should be sent. At most three emails per account and purpose are issued
    per hour; a newly issued link replaces the previous link.

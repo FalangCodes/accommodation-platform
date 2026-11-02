@@ -1,16 +1,21 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AxiosError } from "axios";
 import { authApi } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Mode = "verify" | "forgot" | "reset";
+type VerificationResult =
+  | { kind: "missing" }
+  | { kind: "verified"; message: string }
+  | { kind: "failed"; message: string; retryable: boolean };
 
 function EmailForm({ mode }: { mode: Mode }) {
   const { clearSession } = useAuth();
@@ -22,8 +27,44 @@ function EmailForm({ mode }: { mode: Mode }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [complete, setComplete] = useState(false);
+  const [verification, setVerification] = useState<VerificationResult | { kind: "checking" }>({ kind: "checking" });
+  const verificationRequest = useRef<Promise<VerificationResult> | null>(null);
 
-  async function perform(action: "verify" | "resend" | "forgot" | "reset") {
+  useEffect(() => {
+    if (mode !== "verify") return;
+    let active = true;
+    // Share the request across Strict Mode's effect replay: the token is single-use.
+    if (!verificationRequest.current) {
+      const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
+      verificationRequest.current = token
+        ? authApi.verifyEmail(token).then<VerificationResult, VerificationResult>(
+          (response) => ({ kind: "verified", message: response.data.message || "Email verified successfully." }),
+          (caught: unknown) => {
+            const status = caught instanceof AxiosError ? caught.response?.status : undefined;
+            return {
+              kind: "failed",
+              message: getApiErrorMessage(caught, "We could not verify your email. Please try again."),
+              retryable: status === undefined || status === 429 || status >= 500,
+            };
+          },
+        )
+        : Promise.resolve({ kind: "missing" });
+    }
+    void verificationRequest.current.then((result) => {
+      if (!active) return;
+      setVerification(result);
+      if (result.kind === "verified") {
+        setMessage(result.message);
+        setComplete(true);
+        window.history.replaceState(null, "", window.location.pathname);
+      } else if (result.kind === "failed") {
+        setError(result.message);
+      }
+    });
+    return () => { active = false; };
+  }, [mode]);
+
+  async function perform(action: "resend" | "forgot" | "reset") {
     setError("");
     setMessage("");
     if (action === "reset" && password !== confirmation) {
@@ -31,18 +72,17 @@ function EmailForm({ mode }: { mode: Mode }) {
       return;
     }
     const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
-    if ((action === "verify" || action === "reset") && !token) {
+    if (action === "reset" && !token) {
       setError("Open the link in your email first, or request a new link below.");
       return;
     }
     setLoading(true);
     try {
-      const response = action === "verify" ? await authApi.verifyEmail(token!)
-        : action === "reset" ? await authApi.resetPassword(token!, password)
+      const response = action === "reset" ? await authApi.resetPassword(token!, password)
         : action === "resend" ? await authApi.resendVerification(email)
         : await authApi.requestPasswordReset(email);
       setMessage(response.data.message);
-      if (action === "verify" || action === "reset") {
+      if (action === "reset") {
         setComplete(true);
         window.history.replaceState(null, "", window.location.pathname);
       }
@@ -57,21 +97,26 @@ function EmailForm({ mode }: { mode: Mode }) {
     }
   }
 
-  const title = mode === "verify" ? "Verify your email" : mode === "forgot" ? "Forgot your password?" : "Reset your password";
+  const checking = mode === "verify" && verification.kind === "checking";
+  const title = mode === "verify" ? complete ? "Email verified" : "Verify your email" : mode === "forgot" ? "Forgot your password?" : "Reset your password";
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center px-4 py-10">
       <main className="w-full max-w-md rounded-2xl bg-white border border-gray-100 shadow-sm p-8">
         <Link href="/" className="font-bold text-[#1F4E79]">AccomFind</Link>
         <h1 className="text-2xl font-bold mt-6 mb-3">{title}</h1>
         <p className="text-sm text-gray-600 mb-5">
-          {mode === "verify" ? "Check your institutional inbox. Open the verification link, then select Verify email. The link expires in 24 hours."
+          {mode === "verify" ? complete ? "Your email address is verified. You can now sign in."
+            : checking ? "Please wait while we verify your email link."
+            : "Open the link in your email to verify your account automatically. The link expires in 24 hours. You can request a new link below."
             : mode === "forgot" ? "Enter your account email to request a password reset link."
             : "Choose a new password. The email link expires in 30 minutes. You will need to sign in again on all devices."}
         </p>
         {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {message && <p role="status" className="mb-4 rounded-xl bg-green-50 p-3 text-sm text-green-800">{message}</p>}
-        {!complete && mode === "verify" && (
-          <Button disabled={loading} onClick={() => perform("verify")} className="w-full mb-6 bg-[#1F4E79] text-white">{loading ? "Please wait..." : "Verify email"}</Button>
+        {checking && <p role="status" className="text-sm text-gray-600">Verifying your email...</p>}
+        {complete && mode === "verify" && <Button asChild className="w-full bg-[#1F4E79] text-white"><Link href="/login">Sign in</Link></Button>}
+        {mode === "verify" && verification.kind === "failed" && verification.retryable && (
+          <Button disabled={loading} onClick={() => window.location.reload()} variant="outline" className="w-full mb-6">Try verification again</Button>
         )}
         {!complete && mode === "reset" && (
           <form onSubmit={(event) => { event.preventDefault(); void perform("reset"); }} className="space-y-4">
@@ -86,22 +131,22 @@ function EmailForm({ mode }: { mode: Mode }) {
             <Button disabled={loading} type="submit" className="w-full bg-[#1F4E79] text-white">{loading ? "Please wait..." : "Reset password"}</Button>
           </form>
         )}
-        {!complete && mode !== "reset" && (
+        {!complete && !checking && mode !== "reset" && (
           <form onSubmit={(event) => { event.preventDefault(); void perform(mode === "verify" ? "resend" : "forgot"); }} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="recovery-email">{mode === "verify" ? "Institutional email" : "Email address"}</Label>
+              <Label htmlFor="recovery-email">Email address</Label>
               <Input id="recovery-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
             <Button disabled={loading} type="submit" variant="outline" className="w-full">{loading ? "Please wait..." : mode === "verify" ? "Resend verification email" : "Send reset link"}</Button>
           </form>
         )}
         {mode === "reset" && !complete && <Link href="/forgot-password" className="block mt-4 text-sm text-[#1F4E79] hover:underline">Request a new reset link</Link>}
-        <Link href="/login" className="block mt-6 text-sm text-center text-[#1F4E79] hover:underline">Back to sign in</Link>
+        {!(complete && mode === "verify") && <Link href="/login" className="block mt-6 text-sm text-center text-[#1F4E79] hover:underline">Back to sign in</Link>}
       </main>
     </div>
   );
 }
 
 export function AuthEmailForm({ mode }: { mode: Mode }) {
-  return <Suspense fallback={<p role="status" className="p-8">Loading...</p>}><EmailForm mode={mode} /></Suspense>;
+  return <Suspense fallback={<p role="status" className="p-8">Loading...</p>}><EmailForm key={mode} mode={mode} /></Suspense>;
 }
