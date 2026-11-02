@@ -1,15 +1,17 @@
+"""Synthetic demo data only. Requires --demo and DEMO_PASSWORD; never run on live data."""
 import asyncio
-import httpx
+import argparse
+import os
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from app.db.base import AsyncSessionLocal, engine, Base
+from sqlalchemy import select, text
+from app.db.base import AsyncSessionLocal, Base
+import app.db.models  # Register every relationship for standalone CLI execution.
 from app.models.user import User
 from app.models.student import Student
 from app.models.landlord import Landlord
 from app.models.university import University
-from app.models.accommodation import Accommodation, AccommodationImage
-from app.models.review import Review, ReviewNLPResult
+from app.models.accommodation import Accommodation
+from app.models.review import Review
 from app.core.security import get_password_hash
 import random
 import json
@@ -25,27 +27,27 @@ UNIVERSITY = {
 }
 
 LANDLORDS = [
-    {"name": "Sea Of Mountains", "email": "seaofmountains@gmail.com", "phone": "053 831 0001"},
-    {"name": "Long Street Lofts", "email": "longstreetlofts@gmail.com", "phone": "053 831 0002"},
-    {"name": "Moroka Hall", "email": "morokahall@gmail.com", "phone": "053 831 0003"},
-    {"name": "Tauna Hall", "email": "taunahall@gmail.com", "phone": "053 831 0004"},
-    {"name": "Mhudi Hall", "email": "mhudihall@gmail.com", "phone": "053 831 0005"},
-    {"name": "Ra-Thaga Hall", "email": "rathagahall@gmail.com", "phone": "053 831 0006"},
-    {"name": "Kimberley Student Nest", "email": "kimberleystudentnest@gmail.com", "phone": "053 831 0007"},
-    {"name": "Diamond City Residences", "email": "diamondcityres@gmail.com", "phone": "053 831 0008"},
+    {"name": "Sea Of Mountains"},
+    {"name": "Long Street Lofts"},
+    {"name": "Moroka Hall"},
+    {"name": "Tauna Hall"},
+    {"name": "Mhudi Hall"},
+    {"name": "Ra-Thaga Hall"},
+    {"name": "Kimberley Student Nest"},
+    {"name": "Diamond City Residences"},
 ]
 
 STUDENTS = [
-    {"name": "Thabo Nkosi", "email": "thabo.nkosi@spu.ac.za"},
-    {"name": "Lerato Mokoena", "email": "lerato.mokoena@spu.ac.za"},
-    {"name": "Sipho Dlamini", "email": "sipho.dlamini@spu.ac.za"},
-    {"name": "Nomvula Zulu", "email": "nomvula.zulu@spu.ac.za"},
-    {"name": "Kagiso Sithole", "email": "kagiso.sithole@spu.ac.za"},
-    {"name": "Ayanda Khumalo", "email": "ayanda.khumalo@spu.ac.za"},
-    {"name": "Tshepiso Molefe", "email": "tshepiso.molefe@spu.ac.za"},
-    {"name": "Rethabile Ntuli", "email": "rethabile.ntuli@spu.ac.za"},
-    {"name": "Keabetswe Motsepe", "email": "keabetswe.motsepe@spu.ac.za"},
-    {"name": "Zanele Mahlangu", "email": "zanele.mahlangu@spu.ac.za"},
+    {"name": "Thabo Nkosi"},
+    {"name": "Lerato Mokoena"},
+    {"name": "Sipho Dlamini"},
+    {"name": "Nomvula Zulu"},
+    {"name": "Kagiso Sithole"},
+    {"name": "Ayanda Khumalo"},
+    {"name": "Tshepiso Molefe"},
+    {"name": "Rethabile Ntuli"},
+    {"name": "Keabetswe Motsepe"},
+    {"name": "Zanele Mahlangu"},
 ]
 
 ACCOMMODATIONS = [
@@ -377,267 +379,89 @@ REVIEW_TEMPLATES = [
 ]
 
 
-async def call_nlp(review_id: int, review_body: str) -> dict:
-    """Call the NLP microservice directly."""
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                "http://nlp:8001/analyze",
-                json={"review_id": review_id, "text": review_body}
-            )
-            if response.status_code == 200:
-                return response.json()
-    except Exception as e:
-        print(f"NLP call failed: {e}")
-    return {}
-
-
-async def seed():
-    async with AsyncSessionLocal() as db:
-        print("Starting seed...")
-
-        # ── 1. Check/create university ──
-        result = await db.execute(select(University).where(University.domain == "spu.ac.za"))
-        university = result.scalar_one_or_none()
-        if not university:
-            university = University(
-                name=UNIVERSITY["name"],
-                domain=UNIVERSITY["domain"],
+async def seed(*, demo=False, password=None, session_factory=None):
+    """Populate an empty demo database; never repair or backfill live reviews."""
+    if not demo:
+        raise RuntimeError("Demo seeding requires the explicit --demo flag.")
+    if not isinstance(password, str) or not 8 <= len(password) <= 64 or len(password.encode("utf-8")) > 72:
+        raise RuntimeError("Set DEMO_PASSWORD to 8-64 characters, at most 72 UTF-8 bytes.")
+    factory = session_factory or AsyncSessionLocal
+    rng = random.Random(42)
+    verified_at = datetime.now(timezone.utc)
+    async with factory() as db:
+        async with db.begin():
+            # Concurrent demo seed commands cannot both pass the empty check.
+            await db.execute(text("SELECT pg_advisory_xact_lock(193734, 0)"))
+            for table in Base.metadata.sorted_tables:
+                if (await db.execute(select(1).select_from(table).limit(1))).scalar_one_or_none() is not None:
+                    raise RuntimeError("Refusing to seed a non-empty database. Existing data was not changed.")
+            password_hash = get_password_hash(password)
+            university = University(name=f"[DEMO] {UNIVERSITY['name']}", domain=UNIVERSITY["domain"],
                 province=UNIVERSITY["province"],
-                campus_location=f"POINT({UNIVERSITY['lng']} {UNIVERSITY['lat']})"
-            )
+                campus_location=f"SRID=4326;POINT({UNIVERSITY['lng']} {UNIVERSITY['lat']})")
             db.add(university)
             await db.flush()
-            print(f"Created university: {university.name}")
-        else:
-            print(f"University already exists: {university.name}")
-
-        # ── 2. Create landlords ──
-        landlord_profiles = []
-        for l in LANDLORDS:
-            result = await db.execute(select(User).where(User.email == l["email"]))
-            existing = result.scalar_one_or_none()
-            if existing:
-                result2 = await db.execute(select(Landlord).where(Landlord.user_id == existing.id))
-                landlord_profiles.append(result2.scalar_one_or_none())
-                print(f"Landlord already exists: {l['email']}")
-                continue
-
-            user = User(
-                email=l["email"],
-                password_hash=get_password_hash("Password123!"),
-                role="landlord",
-                is_active=True,
-            )
-            db.add(user)
-            await db.flush()
-
-            landlord = Landlord(
-                user_id=user.id,
-                display_name=l["name"],
-                contact_phone=l["phone"],
-            )
-            db.add(landlord)
-            await db.flush()
-            landlord_profiles.append(landlord)
-            print(f"Created landlord: {l['name']}")
-
-        # ── 3. Create students ──
-        student_profiles = []
-        for s in STUDENTS:
-            result = await db.execute(select(User).where(User.email == s["email"]))
-            existing = result.scalar_one_or_none()
-            if existing:
-                result2 = await db.execute(select(Student).where(Student.user_id == existing.id))
-                student_profiles.append(result2.scalar_one_or_none())
-                print(f"Student already exists: {s['email']}")
-                continue
-
-            user = User(
-                email=s["email"],
-                password_hash=get_password_hash("Password123!"),
-                role="student",
-                is_active=True,
-            )
-            db.add(user)
-            await db.flush()
-
-            student = Student(
-                user_id=user.id,
-                university_id=university.id,
-                verification_tier=1,
-            )
-            db.add(student)
-            await db.flush()
-            student_profiles.append(student)
-            print(f"Created student: {s['name']}")
-
-        await db.commit()
-
-        # ── 4. Create accommodations ──
-        accommodation_records = []
-        for acc in ACCOMMODATIONS:
-            result = await db.execute(
-                select(Accommodation).where(Accommodation.title == acc["title"])
-            )
-            existing = result.scalar_one_or_none()
-            if existing:
-                accommodation_records.append(existing)
-                print(f"Accommodation already exists: {acc['title']}")
-                continue
-
-            landlord = landlord_profiles[acc["landlord_idx"]]
-            if not landlord:
-                print(f"Skipping {acc['title']} — landlord not found")
-                continue
-
-            new_acc = Accommodation(
-                landlord_id=landlord.id,
-                title=acc["title"],
-                description=acc["description"],
-                address=acc["address"],
-                location=f"POINT({acc['lng']} {acc['lat']})",
-                price_min=acc["price_min"],
-                price_max=acc["price_max"],
-                status="approved",
-            )
-            db.add(new_acc)
-            await db.flush()
-            accommodation_records.append(new_acc)
-            print(f"Created accommodation: {acc['title']}")
-
-        await db.commit()
-
-               
-
-        # ── 5. Create reviews + NLP ──
-        review_count = 0
-        for acc in accommodation_records:
-            # Check existing review count
-            result = await db.execute(
-                select(Review).where(
-                    Review.accommodation_id == acc.id,
-                    Review.deleted_at == None
-                )
-            )
-            existing_reviews = result.scalars().all()
-            if len(existing_reviews) >= 5:
-                print(f"Skipping reviews for {acc.title} — already has {len(existing_reviews)}")
-                continue
-
-            # Shuffle students so different ones review each accommodation
-            shuffled_students = random.sample(
-                [s for s in student_profiles if s is not None],
-                min(5, len([s for s in student_profiles if s is not None]))
-            )
-
-            # Pick review mix: 3 positive, 1 negative, 1 neutral
-            review_mix = [
-                ("positive", random.choice(REVIEW_TEMPLATES[0][1])),
-                ("positive", random.choice(REVIEW_TEMPLATES[0][1])),
-                ("positive", random.choice(REVIEW_TEMPLATES[0][1])),
-                ("negative", random.choice(REVIEW_TEMPLATES[1][1])),
-                ("neutral",  random.choice(REVIEW_TEMPLATES[2][1])),
-            ]
-            random.shuffle(review_mix)
-
-            for i, (student, (sentiment_hint, body_template)) in enumerate(
-                zip(shuffled_students, review_mix)
-            ):
-                body = body_template.format(name=acc.title)
-                rating = (
-                    random.choice([4, 5]) if sentiment_hint == "positive"
-                    else random.choice([1, 2]) if sentiment_hint == "negative"
-                    else random.choice([3])
-                )
-
-                # Check student hasn't already reviewed this accommodation
-                result = await db.execute(
-                    select(Review).where(
-                        Review.student_id == student.id,
-                        Review.accommodation_id == acc.id,
-                        Review.deleted_at == None
-                    )
-                )
-                if result.scalar_one_or_none():
-                    continue
-
-                review = Review(
-                    student_id=student.id,
-                    accommodation_id=acc.id,
-                    rating=rating,
-                    body=body,
-                    status="pending_analysis",
-                )
-                db.add(review)
+            landlords = []
+            for index, item in enumerate(LANDLORDS, 1):
+                user = User(email=f"demo.landlord.{index}@example.com", password_hash=password_hash,
+                            role="landlord", is_active=True, email_verified_at=verified_at)
+                db.add(user)
                 await db.flush()
+                landlord = Landlord(user_id=user.id, display_name=f"[DEMO] {item['name']}",
+                                    verification_status="verified", verified_at=verified_at)
+                db.add(landlord)
+                await db.flush()
+                landlords.append(landlord)
+            students = []
+            for index, item in enumerate(STUDENTS, 1):
+                user = User(email=f"demo.student.{index}@example.com", password_hash=password_hash,
+                            role="student", is_active=True, email_verified_at=verified_at)
+                db.add(user)
+                await db.flush()
+                first, _, last = item["name"].partition(" ")
+                student = Student(user_id=user.id, university_id=university.id,
+                                  first_name=first, last_name=last or "Student",
+                                  student_number=f"DEMO-{index:04d}", verification_tier=1)
+                db.add(student)
+                await db.flush()
+                students.append(student)
+            review_count = 0
+            for item in ACCOMMODATIONS:
+                accommodation = Accommodation(landlord_id=landlords[item["landlord_idx"]].id,
+                    title=f"[DEMO] {item['title']}",
+                    description="Synthetic demonstration listing. " + item["description"],
+                    address=item["address"], location=f"SRID=4326;POINT({item['lng']} {item['lat']})",
+                    price_min=item["price_min"], price_max=item["price_max"], status="approved")
+                db.add(accommodation)
+                await db.flush()
+                selected = rng.sample(students, min(5, len(students)))
+                mix = [("positive", rng.choice(REVIEW_TEMPLATES[0][1])) for _ in range(3)]
+                mix += [("negative", rng.choice(REVIEW_TEMPLATES[1][1])),
+                        ("neutral", rng.choice(REVIEW_TEMPLATES[2][1]))]
+                rng.shuffle(mix)
+                for student, (sentiment_hint, template) in zip(selected, mix):
+                    rating = rng.choice([4, 5]) if sentiment_hint == "positive" else rng.choice([1, 2]) if sentiment_hint == "negative" else 3
+                    db.add(Review(student_id=student.id, accommodation_id=accommodation.id,
+                                  rating=rating, body=template.format(name=accommodation.title),
+                                  status="pending_analysis"))
+                    review_count += 1
+            # One transaction: failure rolls back every demo insert.
+    counts = {"landlords": len(landlords), "students": len(students),
+              "accommodations": len(ACCOMMODATIONS), "pending_reviews": review_count}
+    print("Demo seed complete: " + json.dumps(counts))
+    print("Reviews remain pending for the normal Gemini analysis/moderation workflow. No AI or email calls were made.")
+    return counts
 
-                # Call NLP service
-                print(f"  Calling NLP for review on {acc.title}...")
-                nlp_result = await call_nlp(review.id, review.body)
 
-                if nlp_result:
-                    nlp_record = ReviewNLPResult(
-                        review_id=review.id,
-                        sentiment=nlp_result.get("sentiment", "neutral"),
-                        sentiment_score=nlp_result.get("sentiment_score", 0.5),
-                        aspects=nlp_result.get("aspects", {}),
-                        spam_flag=nlp_result.get("is_toxic", False),
-                    )
-                    db.add(nlp_record)
-                    review.status = "analysed"
-
-                await db.commit()
-                review_count += 1
-                print(f"  Created review {review_count} for {acc.title} (rating: {rating})")
-
-        print(f"\nSeed complete!")
-        print(f"Landlords: {len([l for l in landlord_profiles if l])}")
-        print(f"Students: {len([s for s in student_profiles if s])}")
-        print(f"Accommodations: {len(accommodation_records)}")
-        print(f"Reviews created: {review_count}")
-
-        # ── 6. Backfill missing NLP results ──
-        print("\nBackfilling missing NLP results...")
-        result = await db.execute(
-            select(Review).where(
-                Review.deleted_at == None,
-                Review.status == "pending_analysis"
-            )
-        )
-        pending_reviews = result.scalars().all()
-        print(f"Found {len(pending_reviews)} reviews without NLP results")
-
-        for review in pending_reviews:
-            # Check if NLP result already exists
-            existing_nlp = await db.execute(
-                select(ReviewNLPResult).where(ReviewNLPResult.review_id == review.id)
-            )
-            if existing_nlp.scalar_one_or_none():
-                review.status = "analysed"
-                await db.commit()
-                print(f"  Review {review.id} already has NLP — marking analysed")
-                continue
-
-            print(f"  Processing review {review.id}...")
-            nlp_result = await call_nlp(review.id, review.body)
-            if nlp_result:
-                nlp_record = ReviewNLPResult(
-                    review_id=review.id,
-                    sentiment=nlp_result.get("sentiment", "neutral"),
-                    sentiment_score=nlp_result.get("sentiment_score", 0.5),
-                    aspects=nlp_result.get("aspects", {}),
-                    spam_flag=nlp_result.get("is_toxic", False),
-                )
-                db.add(nlp_record)
-                review.status = "analysed"
-                await db.commit()
-                print(f"  NLP complete for review {review.id} — sentiment: {nlp_result.get('sentiment')}")
-            else:
-                print(f"  NLP failed for review {review.id}")
-
-        print("Backfill complete.")
+def main():
+    parser = argparse.ArgumentParser(description="Create synthetic data in an empty demo database only.")
+    parser.add_argument("--demo", action="store_true", help="Explicitly confirm this is an empty demo database")
+    args = parser.parse_args()
+    try:
+        asyncio.run(seed(demo=args.demo, password=os.getenv("DEMO_PASSWORD")))
+    except RuntimeError as error:
+        parser.exit(2, f"{error}\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    main()

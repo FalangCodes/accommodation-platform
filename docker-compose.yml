@@ -48,14 +48,5 @@ services:
     volumes:
       - ./backend:/app
 
-  nlp:
-    build: ./nlp-service
-    container_name: accommodation_nlp
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./nlp-service:/app
-
 volumes:
   postgres_data:
-  nlp_model_cache:

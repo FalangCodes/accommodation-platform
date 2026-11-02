@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     AUTH_TRUSTED_PROXY_IPS: str = ""
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379")
-    NLP_SERVICE_URL: str = os.getenv("NLP_SERVICE_URL", "http://nlp:8001")
+    # Accepted for older .env files only; no service uses this retired setting.
+    NLP_SERVICE_URL: str = ""
     DEFAULT_SEARCH_RADIUS_KM: int = 5
     MODERATOR_INVITE_KEY: str = "change-me-in-env"
     AZURE_STORAGE_CONNECTION_STRING: str = ""
