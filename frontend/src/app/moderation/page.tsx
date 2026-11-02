@@ -1,5 +1,7 @@
 "use client";
 
+import { getApiErrorMessage } from "@/lib/api-error";
+
 import { FlaggedReviewQueue, FlaggedReviewCount } from "@/components/flagged-review-queue";
 import { ProtectedDocumentLink } from "@/components/protected-document-link";
 import { AppealReviewContext, type AppealReview } from "@/components/appeal-review-context";
@@ -632,8 +634,8 @@ export default function AdminPage() {
       await api.patch(`/api/v1/moderation/listings/${id}/approve`);
       queryClient.invalidateQueries({ queryKey: ["pending-listings"] });
       toast.success(`"${title}" approved and is now live.`);
-    } catch {
-      toast.error("Failed to approve listing");
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to approve listing"));
     }
   };
 
@@ -723,8 +725,8 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ["suspended-listings"] });
       toast.success(`"${reinstateTarget.title}" reinstated and is now live.`);
       setReinstateTarget(null);
-    } catch {
-      toast.error("Failed to reinstate listing");
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to reinstate listing"));
     } finally {
       setActionLoading(false);
     }

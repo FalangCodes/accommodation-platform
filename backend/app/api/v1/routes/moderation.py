@@ -29,6 +29,14 @@ class ModerationDecision(BaseModel):
     reason: Optional[str] = None
 
 
+def require_ownership_document(accommodation: Accommodation) -> None:
+    if not (accommodation.ownership_doc_url or "").strip():
+        raise HTTPException(
+            status_code=409,
+            detail="An ownership document must be uploaded before this listing can be published.",
+        )
+
+
 async def invalidate_listing(listing_id, reviews_changed=False, db=None):
     if reviews_changed and db is not None:
         await refresh_listing_insights(listing_id, db)
@@ -57,6 +65,7 @@ async def approve_listing(
     if accommodation.status == "approved":
         raise HTTPException(status_code=409, detail="Listing is already approved")
 
+    require_ownership_document(accommodation)
     accommodation.status = "approved"
 
     log = ModerationLog(
@@ -144,6 +153,7 @@ async def reinstate_listing(
         raise HTTPException(status_code=404, detail="Accommodation not found")
     if accommodation.status != "suspended":
         raise HTTPException(status_code=400, detail="Only suspended listings can be reinstated")
+    require_ownership_document(accommodation)
     accommodation.status = "approved"
     log = ModerationLog(
         moderator_id=current_user.id,
@@ -508,6 +518,7 @@ async def resolve_appeal(
             listing_id = resource.accommodation_id
             reviews_changed = True
         elif appeal.resource_type == "listing":
+            require_ownership_document(resource)
             resource.status = "approved"
             listing_id = resource.id
         else:

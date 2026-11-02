@@ -145,8 +145,8 @@ export default function AdminAccommodationDetailPage() {
       toast.success("Listing approved and is now live.");
       queryClient.invalidateQueries({ queryKey: ["admin-accommodation", id] });
       queryClient.invalidateQueries({ queryKey: ["admin-universities-tree"] });
-    } catch {
-      toast.error("Failed to approve listing");
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to approve listing"));
     } finally {
       setActionLoading(false);
     }

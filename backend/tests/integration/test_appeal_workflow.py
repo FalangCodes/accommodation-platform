@@ -172,6 +172,7 @@ async def test_upholding_restores_correct_resource_and_audit_type(workflow, kind
     async with sessions() as db:
         if kind == "listing":
             (await db.get(Accommodation, 1)).status = {"reject_listing": "rejected", "suspend_listing": "suspended", "remove_listing": "removed"}[action]
+            (await db.get(Accommodation, 1)).ownership_doc_url = "mock://ownership.pdf"
         else:
             owner = await db.get(Landlord, 1)
             owner.verification_status = "rejected"
@@ -321,3 +322,83 @@ async def test_removed_review_cannot_be_released_and_invalidates_cached_results(
     assert (await client.patch(f"/api/v1/moderation/reviews/{review_id}/release", headers=headers(4))).status_code == 400
     invalidated = [key for _, args in effects for key in args]
     assert "reviews:1" in invalidated and "listing:1" in invalidated and "search:*" in invalidated
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("document", [None, "", " \t\n"])
+@pytest.mark.parametrize("flow,original_status", [
+    ("approve", "pending"), ("reinstate", "suspended"), ("appeal", "rejected"),
+])
+async def test_listing_publication_requires_document_without_side_effects(workflow, document, flow, original_status):
+    client, sessions, _, _, effects = workflow
+    async with sessions() as db:
+        listing = await db.get(Accommodation, 1)
+        listing.status = original_status
+        listing.ownership_doc_url = document
+        await db.commit()
+    appeal_id = None
+    if flow == "appeal":
+        await penalty(sessions, "listing", 1, "reject_listing")
+        created = await submit(client, "listing", 1, 3)
+        assert created.status_code == 201
+        appeal_id = created.json()["id"]
+    async with sessions() as db:
+        log_count = (await db.execute(select(func.count(ModerationLog.id)))).scalar_one()
+    effects.clear()
+    path = (f"/api/v1/moderation/appeals/{appeal_id}/resolve" if appeal_id else
+            f"/api/v1/moderation/listings/1/{flow}")
+    response = await client.patch(path, headers=headers(2), json={"decision": "upheld"} if appeal_id else None)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "An ownership document must be uploaded before this listing can be published."
+    async with sessions() as db:
+        listing = await db.get(Accommodation, 1)
+        assert listing.status == original_status and listing.ownership_doc_url == document
+        assert (await db.execute(select(func.count(ModerationLog.id)))).scalar_one() == log_count
+        if appeal_id:
+            appeal = await db.get(Appeal, appeal_id)
+            assert appeal.status == "pending"
+            assert appeal.assigned_admin_id is None and appeal.resolved_at is None
+    assert not effects
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("actor", [2, 4])
+@pytest.mark.parametrize("flow,original_status,action", [
+    ("approve", "pending", "approve_listing"),
+    ("reinstate", "suspended", "reinstate_listing"),
+])
+async def test_admin_and_moderator_can_publish_documented_listing(workflow, actor, flow, original_status, action):
+    client, sessions, _, _, effects = workflow
+    async with sessions() as db:
+        listing = await db.get(Accommodation, 1)
+        listing.status = original_status
+        listing.ownership_doc_url = "mock://ownership.pdf"
+        await db.commit()
+    effects.clear()
+    response = await client.patch(f"/api/v1/moderation/listings/1/{flow}", headers=headers(actor))
+    assert response.status_code == 200
+    async with sessions() as db:
+        assert (await db.get(Accommodation, 1)).status == "approved"
+        logs = (await db.execute(select(ModerationLog))).scalars().all()
+        assert len(logs) == 1 and logs[0].action == action and logs[0].moderator_id == actor
+    assert effects
+
+
+@pytest.mark.asyncio
+async def test_undocumented_listing_appeal_can_still_be_dismissed(workflow):
+    client, sessions, _, _, _ = workflow
+    async with sessions() as db:
+        listing = await db.get(Accommodation, 1)
+        listing.status = "rejected"
+        listing.ownership_doc_url = None
+        await db.commit()
+    await penalty(sessions, "listing", 1, "reject_listing")
+    created = await submit(client, "listing", 1, 3)
+    assert created.status_code == 201
+    appeal_id = created.json()["id"]
+    response = await client.patch(f"/api/v1/moderation/appeals/{appeal_id}/resolve", headers=headers(2),
+                                  json={"decision": "dismissed"})
+    assert response.status_code == 200
+    async with sessions() as db:
+        assert (await db.get(Accommodation, 1)).status == "rejected"
+        assert (await db.get(Appeal, appeal_id)).status == "dismissed"
